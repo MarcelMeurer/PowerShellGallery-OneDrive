@@ -1,8 +1,4 @@
 # User-specific files
-*.suo
-*.user
-*.userosscache
-*.sln.docstates
 *.secret*
 
 # Build results
