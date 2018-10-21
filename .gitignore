@@ -1,0 +1,11 @@
+# User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.secret*
+
+# Build results
+[Tt]est/
+[Ee]xport/
+[Ll]og/
