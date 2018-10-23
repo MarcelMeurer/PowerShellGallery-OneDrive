@@ -45,7 +45,7 @@ function Get-ODAuthentication
 	{
 		write-debug("A refresh token is given. Try to refresh it in code mode.")
 		$body="client_id=$ClientID&redirect_URI=$RedirectURI&client_secret=$AppKey&refresh_token="+$RefreshToken+"&grant_type=refresh_token"
-		$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -ContentType "application/x-www-form-URLencoded" -Body $Body
+		$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -ContentType "application/x-www-form-URLencoded" -Body $Body -UseBasicParsing
 		$Authentication = $webRequest.Content |   ConvertFrom-Json
 	} else
 	{
@@ -96,7 +96,7 @@ function Get-ODAuthentication
 			if ($Authentication.code)
 			{
 				$body="client_id=$ClientID&redirect_URI=$RedirectURI&client_secret=$AppKey&code="+$Authentication.code+"&grant_type=authorization_code"
-				$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -ContentType "application/x-www-form-urlencoded" -Body $Body
+				$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
 				$Authentication = $webRequest.Content |   ConvertFrom-Json
 			} else
 			{
@@ -158,7 +158,7 @@ function Get-ODWebContent
 	}
 	$ODRootURI="https://api.onedrive.com/v1.0"
 	try {
-		$webRequest=Invoke-WebRequest -Method $Method -Uri ($ODRootURI+$rURI) -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -Body $xBody -ErrorAction SilentlyContinue
+		$webRequest=Invoke-WebRequest -Method $Method -Uri ($ODRootURI+$rURI) -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -Body $xBody -UseBasicParsing -ErrorAction SilentlyContinue
 	} 
 	catch
 	{
@@ -607,7 +607,7 @@ function Add-ODItem
 	{
 		$ODRootURI="https://api.onedrive.com/v1.0"
 		$rURI=(($ODRootURI+$rURI).TrimEnd(":")+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/content").Replace("/root/","/root:/")
-		return $webRequest=Invoke-WebRequest -Method PUT -InFile $LocalFile -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "multipart/form-data" -ErrorAction SilentlyContinue
+		return $webRequest=Invoke-WebRequest -Method PUT -InFile $LocalFile -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "multipart/form-data"  -UseBasicParsing -ErrorAction SilentlyContinue
 	}
 	catch
 	{
