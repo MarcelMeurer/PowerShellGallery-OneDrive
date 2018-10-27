@@ -1,8 +1,8 @@
 # User-specific files
 *.secret*
+*gitignore
 
 [Pp]ublish2Gallery.ps1
-.gitignore
 
 # Build results
 [Tt]est/
