@@ -1,6 +1,8 @@
 # User-specific files
 *.secret*
 
+[Pp]ublish2Gallery.ps1
+
 # Build results
 [Tt]est/
 [Ee]xport/

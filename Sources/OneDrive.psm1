@@ -2,13 +2,15 @@ function Get-ODAuthentication
 {
 	<#
 	.DESCRIPTION
-	Connect to OneDrive for authentication with a given client id (get your free client id on https://apps.dev.microsoft.com) For a step-by-step guide reade this blog post: https://www.sepago.com/node/2994
-	.PARAMETER ClientID
-	ClientID of your "app" from https://apps.dev.microsoft.com
+	Connect to OneDrive for authentication with a given client id (get your free client id on https://apps.dev.microsoft.com) For a step-by-step guide: https://github.com/MarcelMeurer/PowerShellGallery-OneDrive
+	.PARAMETER ClientId
+	ClientId of your "app" from https://apps.dev.microsoft.com
 	.PARAMETER AppKey
 	The client secret for your OneDrive "app". If AppKey is set the authentication mode is "code." Code authentication returns a refresh token to refresh your authentication token unattended.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
 	.PARAMETER Scope
-	Comma-separated string defining the authentication scope (https://dev.onedrive.com/auth/msa_oauth.htm). Default: "onedrive.readwrite,offline_access".
+	Comma-separated string defining the authentication scope (https://dev.onedrive.com/auth/msa_oauth.htm). Default: "onedrive.readwrite,offline_access". Not needed for OneDrive 4 Business access.
 	.PARAMETER RefreshToken
 	Refreshes the authentication token unattended with this refresh token. 
 	.PARAMETER AutoAccept
@@ -17,7 +19,7 @@ function Get-ODAuthentication
 	Code authentication requires a correct URI. Use the same as in the app registration e.g. http://localhost/logon. Default is https://login.live.com/oauth20_desktop.srf. Don't use this parameter for token-based authentication. 
 
 	.EXAMPLE
-    $Authentication=Get-ODAuthentication -ClientID "0000000012345678"
+    $Authentication=Get-ODAuthentication -ClientId "0000000012345678"
 	$AuthToken=$Authentication.access_token
 	Connect to OneDrive for authentication and save the token to $AuthToken
 	.NOTES
@@ -25,14 +27,23 @@ function Get-ODAuthentication
 	#>
 	PARAM(
 		[Parameter(Mandatory=$True)]
-		[string]$ClientID = "unknown",
+		[string]$ClientId = "unknown",
 		[string]$Scope = "onedrive.readwrite,offline_access",
 		[string]$RedirectURI ="https://login.live.com/oauth20_desktop.srf",
 		[string]$AppKey="",
 		[string]$RefreshToken="",
+		[string]$ResourceId="",
 		[switch]$AutoAccept,
-		[switch]$LogOut		
+		[switch]$LogOut
 	)
+	$optResourceId=""
+	$optOauthVersion="/v2.0"
+	if ($ResourceId -ne "")
+	{
+		write-debug("Running in OneDrive 4 Business mode")
+		$optResourceId="&resource=$ResourceId"
+		$optOauthVersion=""
+	}
 	$Authentication=""
 	if ($AppKey -eq "")
 	{ 
@@ -44,8 +55,9 @@ function Get-ODAuthentication
 	if ($RefreshToken -ne "")
 	{
 		write-debug("A refresh token is given. Try to refresh it in code mode.")
-		$body="client_id=$ClientID&redirect_URI=$RedirectURI&client_secret=$AppKey&refresh_token="+$RefreshToken+"&grant_type=refresh_token"
-		$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -ContentType "application/x-www-form-URLencoded" -Body $Body -UseBasicParsing
+		$body="client_id=$ClientId&redirect_URI=$RedirectURI&client_secret=$([uri]::EscapeDataString($AppKey))&refresh_token="+$RefreshToken+"&grant_type=refresh_token"
+		write-host $body
+		$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2$optOauthVersion/token" -ContentType "application/x-www-form-URLencoded" -Body $Body -UseBasicParsing
 		$Authentication = $webRequest.Content |   ConvertFrom-Json
 	} else
 	{
@@ -59,8 +71,16 @@ function Get-ODAuthentication
 		}
 		else
 		{
-			$URIGetAccessTokenRedirect=$RedirectURI
-			$URIGetAccessToken="https://login.live.com/oauth20_authorize.srf?client_id="+$ClientID+"&scope="+$Scope+"&response_type="+$Type+"&redirect_URI="+$URIGetAccessTokenRedirect
+			if ($ResourceId -ne "")
+			{
+				# OD4B
+				$URIGetAccessToken="https://login.microsoftonline.com/common/oauth2/authorize?response_type=code&client_id=$ClientId&redirect_URI=$RedirectURI"
+			}
+			else
+			{
+				# OD private
+				$URIGetAccessToken="https://login.live.com/oauth20_authorize.srf?client_id="+$ClientId+"&scope="+$Scope+"&response_type="+$Type+"&redirect_URI="+$RedirectURI
+			}
 		}
 		$form = New-Object Windows.Forms.Form
 		$form.text = "Authenticate to OneDrive"
@@ -95,8 +115,8 @@ function Get-ODAuthentication
 			}
 			if ($Authentication.code)
 			{
-				$body="client_id=$ClientID&redirect_URI=$RedirectURI&client_secret=$AppKey&code="+$Authentication.code+"&grant_type=authorization_code"
-				$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2/v2.0/token" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
+				$body="client_id=$ClientId&redirect_URI=$RedirectURI&client_secret=$([uri]::EscapeDataString($AppKey))&code="+$Authentication.code+"&grant_type=authorization_code"+$optResourceId
+				$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2$optOauthVersion/token" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
 				$Authentication = $webRequest.Content |   ConvertFrom-Json
 			} else
 			{
@@ -121,6 +141,17 @@ function Get-ODAuthentication
 	}
 	return $Authentication 
 }
+function Get-ODRootUri 
+{
+	if ($ResourceId -ne "")
+	{
+		return $ResourceId+"_api/v2.0"
+	}
+	else
+	{
+		return "https://api.onedrive.com/v1.0"
+	}
+}
 
 function Get-ODWebContent 
 {
@@ -129,6 +160,8 @@ function Get-ODWebContent
 	Internal function to interact with the OneDrive API
 	.PARAMETER AccessToken
 	A valid access token for bearer authorization.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
 	.PARAMETER rURI
 	Relative path to the API.
 	.PARAMETER Method
@@ -143,6 +176,7 @@ function Get-ODWebContent
 	PARAM(
 		[Parameter(Mandatory=$True)]
 		[string]$AccessToken,
+		[String]$ResourceId="",
 		[string]$rURI = "",
 		[ValidateSet("PUT","GET","POST","PATCH","DELETE")] 
         [String]$Method="GET",
@@ -156,7 +190,7 @@ function Get-ODWebContent
 	{
 		$xBody=$Body
 	}
-	$ODRootURI="https://api.onedrive.com/v1.0"
+	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 	try {
 		$webRequest=Invoke-WebRequest -Method $Method -Uri ($ODRootURI+$rURI) -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -Body $xBody -UseBasicParsing -ErrorAction SilentlyContinue
 	} 
@@ -195,6 +229,8 @@ function Get-ODDrives
 	Get user's drives.
 	.PARAMETER AccessToken
 	A valid access token for bearer authorization.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
 	.EXAMPLE
     Get-ODDrives -AccessToken $AuthToken
 	List all OneDrives available for your account (there is normally only one).
@@ -203,36 +239,37 @@ function Get-ODDrives
 	#>
 	PARAM(
 		[Parameter(Mandatory=$True)]
-		[string]$AccessToken
+		[string]$AccessToken,
+		[String]$ResourceId=""
 	)
-	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -Method GET -rURI "/drives"
+	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method GET -rURI "/drives"
 	return $ResponseObject.Value
 }
 
-function Format-ODPathorIDString
+function Format-ODPathorIdString
 {
 	<#
 	.DESCRIPTION
 	Formats a given path like '/myFolder/mySubfolder/myFile' into an expected URI format
 	.PARAMETER Path
 	Specifies the path of an element. If it is not given, the path is "/"
-	.PARAMETER ElementID
-	Specifies the id of an element. If Path and ElementID are given, the ElementID is used with a warning
-	.PARAMETER DriveID
+	.PARAMETER ElementId
+	Specifies the id of an element. If Path and ElementId are given, the ElementId is used with a warning
+	.PARAMETER DriveId
 	Specifies the OneDrive drive id. If not set, the default drive is used
 	.NOTES
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
 		[string]$Path="",
-		[string]$DriveID="",
-		[string]$ElementID=""
+		[string]$DriveId="",
+		[string]$ElementId=""
 	)
-	if (!$ElementID -eq "")
+	if (!$ElementId -eq "")
 	{
-		# Use ElementID parameters
-		if (!$Path -eq "") {write-debug("Warning: Path and ElementID parameters are set. Only ElementID is used!")}
-		return "/drive/items/"+$ElementID
+		# Use ElementId parameters
+		if (!$Path -eq "") {write-debug("Warning: Path and ElementId parameters are set. Only ElementId is used!")}
+		return "/drive/items/"+$ElementId
 	}
 	else
 	{
@@ -253,7 +290,7 @@ function Format-ODPathorIDString
 		# remove last "/" if exist 
 		$Path=$Path.TrimEnd("/")
 		# insert drive part of URL
-		if ($DriveID -eq "") 
+		if ($DriveId -eq "") 
 		{	
 			# Default drive
 			$Path="/drive/root:"+$Path+":"
@@ -261,9 +298,9 @@ function Format-ODPathorIDString
 		else
 		{
 			# Named drive
-			$Path="/drives/"+$DriveID+"/root:"+$Path+":"
+			$Path="/drives/"+$DriveId+"/root:"+$Path+":"
 		}
-		return $Path
+		return ($Path).replace("root::","root")
 	}
 }
 
@@ -274,20 +311,22 @@ function Get-ODItemProperty
 	Get the properties of an item (file or folder).
 	.PARAMETER AccessToken
 	A valid access token for bearer authorization.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
 	.PARAMETER Path
 	Specifies the path to the element/item. If not given, the properties of your default root drive are listed.
-	.PARAMETER ElementID
-	Specifies the id of the element/item. If Path and ElementID are given, the ElementID is used with a warning.
+	.PARAMETER ElementId
+	Specifies the id of the element/item. If Path and ElementId are given, the ElementId is used with a warning.
 	.PARAMETER SelectProperties
 	Specifies a comma-separated list of the properties to be returned for file and folder objects (case sensitive). If not set, name, size, lastModifiedDateTime and id are used. (See https://dev.onedrive.com/odata/optional-query-parameters.htm).
 	If you use -SelectProperties "", all properties are listed. Warning: A complex "content.downloadUrl" is listed/generated for download files without authentication for several hours.
-	.PARAMETER DriveID
+	.PARAMETER DriveId
 	Specifies the OneDrive drive id. If not set, the default drive is used.
 	.EXAMPLE
     Get-ODItemProperty -AccessToken $AuthToken -Path "/Data/documents/2016/AzureML with PowerShell.docx"
 	Get the default set of metadata for a file or folder (name, size, lastModifiedDateTime, id)
 
-	Get-ODItemProperty -AccessToken $AuthToken -ElementID 8BADCFF017EAA324!12169 -SelectProperties ""
+	Get-ODItemProperty -AccessToken $AuthToken -ElementId 8BADCFF017EAA324!12169 -SelectProperties ""
 	Get all metadata of a file or folder by element id ("" select all properties)	
 	.NOTES
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
@@ -295,12 +334,13 @@ function Get-ODItemProperty
 	PARAM(
 		[Parameter(Mandatory=$True)]
 		[string]$AccessToken,
+		[string]$ResourceId="",
 		[string]$Path="/",
-		[string]$ElementID="",
+		[string]$ElementId="",
 		[string]$SelectProperties="name,size,lastModifiedDateTime,id",
-		[string]$DriveID=""
+		[string]$DriveId=""
 	)
-	return Get-ODChildItems -AccessToken $AccessToken -Path $Path -ElementID $ElementID -SelectProperties $SelectProperties -DriveID $DriveID -ItemPropertyMode
+	return Get-ODChildItems -AccessToken $AccessToken -ResourceId $ResourceId -Path $Path -ElementId $ElementId -SelectProperties $SelectProperties -DriveId $DriveId -ItemPropertyMode
 }
 
 function Get-ODChildItems
@@ -310,14 +350,16 @@ function Get-ODChildItems
 	Get child items of a path. Return count is not limited.
 	.PARAMETER AccessToken
 	A valid access token for bearer authorization.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
 	.PARAMETER Path
 	Specifies the path of elements to be listed. If not given, the path is "/".
-	.PARAMETER ElementID
-	Specifies the id of an element. If Path and ElementID are given, the ElementID is used with a warning.
+	.PARAMETER ElementId
+	Specifies the id of an element. If Path and ElementId are given, the ElementId is used with a warning.
 	.PARAMETER SelectProperties
 	Specifies a comma-separated list of the properties to be returned for file and folder objects (case sensitive). If not set, name, size, lastModifiedDateTime and id are used. (See https://dev.onedrive.com/odata/optional-query-parameters.htm).
 	If you use -SelectProperties "", all properties are listed. Warning: A complex "content.downloadUrl" is listed/generated for download files without authentication for several hours.
-	.PARAMETER DriveID
+	.PARAMETER DriveId
 	Specifies the OneDrive drive id. If not set, the default drive is used.
 	.EXAMPLE
     Get-ODChildItems -AccessToken $AuthToken -Path "/" | ft
@@ -331,16 +373,17 @@ function Get-ODChildItems
 	PARAM(
 		[Parameter(Mandatory=$True)]
 		[string]$AccessToken,
+		[String]$ResourceId="",
 		[string]$Path="/",
-		[string]$ElementID="",
+		[string]$ElementId="",
 		[string]$SelectProperties="name,size,lastModifiedDateTime,id",
-		[string]$DriveID="",
+		[string]$DriveId="",
 		[Parameter(DontShow)]
 		[switch]$ItemPropertyMode,
 		[Parameter(DontShow)]
 		[string]$SearchText
 	)
-	$ODRootURI="https://api.onedrive.com/v1.0"
+	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 	if ($Path.Contains('$skiptoken='))
 	{	
 		# Recursive mode of odata.nextLink detection
@@ -349,7 +392,7 @@ function Get-ODChildItems
 	}
 	else
 	{
-		$rURI=Format-ODPathorIDString -path $Path -ElementID $ElementID -DriveID $DriveID
+		$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 		$rURI=$rURI.Replace("::","")
 		$SelectProperties=$SelectProperties.Replace(" ","")
 		if ($SelectProperties -eq "")
@@ -381,12 +424,12 @@ function Get-ODChildItems
 		}
 	}
 	write-debug("Accessing API with GET to "+$rURI)
-	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -Method GET -rURI $rURI
+	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method GET -rURI $rURI
 	if ($ResponseObject.PSobject.Properties.name -match "@odata.nextLink") 
 	{
 		write-debug("Getting more elements form service (@odata.nextLink is present)")
 		write-debug("LAST: "+$ResponseObject.value.count)
-		Get-ODChildItems -AccessToken $AccessToken -SelectProperties $SelectProperties -Path $ResponseObject."@odata.nextLink".Replace($ODRootURI,"")
+		Get-ODChildItems -AccessToken $AccessToken -ResourceId $ResourceId -SelectProperties $SelectProperties -Path $ResponseObject."@odata.nextLink".Replace($ODRootURI,"")
 	}
 	if ($ItemPropertyMode)
 	{
@@ -404,19 +447,21 @@ function Search-ODItems
 {
 	<#
 	.DESCRIPTION
-	Search for items starting from Path or ElementID.
+	Search for items starting from Path or ElementId.
 	.PARAMETER AccessToken
 	A valid access token for bearer authorization.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
 	.PARAMETER SearchText
 	Specifies search string.
 	.PARAMETER Path
 	Specifies the path of the folder to start the search. If not given, the path is "/".
-	.PARAMETER ElementID
-	Specifies the element id of the folder to start the search. If Path and ElementID are given, the ElementID is used with a warning.
+	.PARAMETER ElementId
+	Specifies the element id of the folder to start the search. If Path and ElementId are given, the ElementId is used with a warning.
 	.PARAMETER SelectProperties
 	Specifies a comma-separated list of the properties to be returned for file and folder objects (case sensitive). If not set, name, size, lastModifiedDateTime and id are used. (See https://dev.onedrive.com/odata/optional-query-parameters.htm).
 	If you use -SelectProperties "", all properties are listed. Warning: A complex "content.downloadUrl" is listed/generated for download files without authentication for several hours.
-	.PARAMETER DriveID
+	.PARAMETER DriveId
 	Specifies the OneDrive drive id. If not set, the default drive is used.
 	.EXAMPLE
     Search-ODItems -AccessToken $AuthToken -Path "/My pictures" -SearchText "FolderA" 
@@ -427,14 +472,15 @@ function Search-ODItems
 	PARAM(
 		[Parameter(Mandatory=$True)]
 		[string]$AccessToken,
+		[String]$ResourceId="",
 		[Parameter(Mandatory=$True)]
 		[string]$SearchText,
 		[string]$Path="/",
-		[string]$ElementID="",
+		[string]$ElementId="",
 		[string]$SelectProperties="name,size,lastModifiedDateTime,id",
-		[string]$DriveID=""
+		[string]$DriveId=""
 	)
-	return Get-ODChildItems -AccessToken $AccessToken -Path $Path -ElementID $ElementID -SelectProperties $SelectProperties -DriveID $DriveID -SearchText $SearchText	
+	return Get-ODChildItems -AccessToken $AccessToken -ResourceId $ResourceId -Path $Path -ElementId $ElementId -SelectProperties $SelectProperties -DriveId $DriveId -SearchText $SearchText	
 }
 
 function New-ODFolder
@@ -444,13 +490,15 @@ function New-ODFolder
 	Create a new folder.
 	.PARAMETER AccessToken
 	A valid access token for bearer authorization.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
 	.PARAMETER FolderName
 	Name of the new folder.
 	.PARAMETER Path
 	Specifies the parent path for the new folder. If not given, the path is "/".
-	.PARAMETER ElementID
-	Specifies the element id for the new folder. If Path and ElementID are given, the ElementID is used with a warning.
-	.PARAMETER DriveID
+	.PARAMETER ElementId
+	Specifies the element id for the new folder. If Path and ElementId are given, the ElementId is used with a warning.
+	.PARAMETER DriveId
 	Specifies the OneDrive drive id. If not set, the default drive is used.
 	.EXAMPLE
     New-ODFolder -AccessToken $AuthToken -Path "/data/documents" -FolderName "2016"
@@ -461,15 +509,16 @@ function New-ODFolder
 	PARAM(
 		[Parameter(Mandatory=$True)]
 		[string]$AccessToken,
+		[String]$ResourceId="",
 		[Parameter(Mandatory=$True)]
 		[string]$FolderName,
 		[string]$Path="/",
-		[string]$ElementID="",
-		[string]$DriveID=""
+		[string]$ElementId="",
+		[string]$DriveId=""
 	)
-	$rURI=Format-ODPathorIDString -path $Path -ElementID $ElementID -DriveID $DriveID
+	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	$rURI=$rURI+"/children"
-	return Get-ODWebContent -AccessToken $AccessToken -Method POST -rURI $rURI -Body ('{"name": "'+$FolderName+'","folder": { },"@name.conflictBehavior": "fail"}')
+	return Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method POST -rURI $rURI -Body ('{"name": "'+$FolderName+'","folder": { },"@name.conflictBehavior": "fail"}')
 }
 
 function Remove-ODItem
@@ -479,11 +528,13 @@ function Remove-ODItem
 	Delete an item (folder or file).
 	.PARAMETER AccessToken
 	A valid access token for bearer authorization.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
 	.PARAMETER Path
 	Specifies the path of the item to be deleted.
-	.PARAMETER ElementID
+	.PARAMETER ElementId
 	Specifies the element id of the item to be deleted.
-	.PARAMETER DriveID
+	.PARAMETER DriveId
 	Specifies the OneDrive drive id. If not set, the default drive is used.
 	.EXAMPLE
     Remove-ODItem -AccessToken $AuthToken -Path "/Data/documents/2016/Azure-big-picture.old.docx"
@@ -494,18 +545,19 @@ function Remove-ODItem
 	PARAM(
 		[Parameter(Mandatory=$True)]
 		[string]$AccessToken,
+		[String]$ResourceId="",
 		[string]$Path="",
-		[string]$ElementID="",
-		[string]$DriveID=""
+		[string]$ElementId="",
+		[string]$DriveId=""
 	)
-	if (($ElementID+$Path) -eq "") 
+	if (($ElementId+$Path) -eq "") 
 	{
-		write-error("Path nor ElementID is set")
+		write-error("Path nor ElementId is set")
 	}
 	else
 	{
-		$rURI=Format-ODPathorIDString -path $Path -ElementID $ElementID -DriveID $DriveID
-		return Get-ODWebContent -AccessToken $AccessToken -Method DELETE -rURI $rURI 
+		$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
+		return Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method DELETE -rURI $rURI 
 	}
 }
 
@@ -516,11 +568,13 @@ function Get-ODItem
 	Download an item/file. Warning: A local file will be overwritten.
 	.PARAMETER AccessToken
 	A valid access token for bearer authorization.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
 	.PARAMETER Path
 	Specifies the path of the file to download.
-	.PARAMETER ElementID
-	Specifies the element id of the file to download. If Path and ElementID are given, the ElementID is used with a warning.
-	.PARAMETER DriveID
+	.PARAMETER ElementId
+	Specifies the element id of the file to download. If Path and ElementId are given, the ElementId is used with a warning.
+	.PARAMETER DriveId
 	Specifies the OneDrive drive id. If not set, the default drive is used.
 	.PARAMETER LocalPath
 	Save file to path (if not given, the current local path is used).
@@ -535,19 +589,20 @@ function Get-ODItem
 	PARAM(
 		[Parameter(Mandatory=$True)]
 		[string]$AccessToken,
+		[String]$ResourceId="",
 		[string]$Path="",
-		[string]$ElementID="",
-		[string]$DriveID="",
+		[string]$ElementId="",
+		[string]$DriveId="",
 		[string]$LocalPath="",
 		[string]$LocalFileName
 	)
-	if (($ElementID+$Path) -eq "") 
+	if (($ElementId+$Path) -eq "") 
 	{
-		write-error("Path nor ElementID is set")
+		write-error("Path nor ElementId is set")
 	}
 	else
 	{
-		$Download=Get-ODItemProperty -AccessToken $AccessToken -Path $Path -ElementID $ElementID -DriveID $DriveID -SelectProperties "name,@content.downloadUrl"
+		$Download=Get-ODItemProperty -AccessToken $AccessToken -ResourceId $ResourceId -Path $Path -ElementId $ElementId -DriveId $DriveId -SelectProperties "name,@content.downloadUrl"
 		if ($LocalPath -eq "") {$LocalPath=Get-Location}
 		if ($LocalFileName -eq "")
 		{
@@ -579,11 +634,13 @@ function Add-ODItem
 	Upload an item/file. Warning: An existing file will be overwritten.
 	.PARAMETER AccessToken
 	A valid access token for bearer authorization.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
 	.PARAMETER Path
 	Specifies the path for the upload folder. If not given, the path is "/".
-	.PARAMETER ElementID
-	Specifies the element id for the upload folder. If Path and ElementID are given, the ElementID is used with a warning.
-	.PARAMETER DriveID
+	.PARAMETER ElementId
+	Specifies the element id for the upload folder. If Path and ElementId are given, the ElementId is used with a warning.
+	.PARAMETER DriveId
 	Specifies the OneDrive drive id. If not set, the default drive is used.
 	.PARAMETER LocalFile
 	Path and file of the local file to be uploaded (C:\data\data.csv).
@@ -596,16 +653,17 @@ function Add-ODItem
 	PARAM(
 		[Parameter(Mandatory=$True)]
 		[string]$AccessToken,
+		[String]$ResourceId="",
 		[string]$Path="/",
-		[string]$ElementID="",
-		[string]$DriveID="",
+		[string]$ElementId="",
+		[string]$DriveId="",
 		[Parameter(Mandatory=$True)]
 		[string]$LocalFile=""
 	)
-	$rURI=Format-ODPathorIDString -path $Path -ElementID $ElementID -DriveID $DriveID
+	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	try
 	{
-		$ODRootURI="https://api.onedrive.com/v1.0"
+		$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 		$rURI=(($ODRootURI+$rURI).TrimEnd(":")+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/content").Replace("/root/","/root:/")
 		return $webRequest=Invoke-WebRequest -Method PUT -InFile $LocalFile -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "multipart/form-data"  -UseBasicParsing -ErrorAction SilentlyContinue
 	}
@@ -622,14 +680,16 @@ function Move-ODItem
 	Moves a file to a new location or renames it.
 	.PARAMETER AccessToken
 	A valid access token for bearer authorization.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
 	.PARAMETER Path
 	Specifies the path of the file to be moved.
-	.PARAMETER ElementID
-	Specifies the element id of the file to be moved. If Path and ElementID are given, the ElementID is used with a warning.
-	.PARAMETER DriveID
+	.PARAMETER ElementId
+	Specifies the element id of the file to be moved. If Path and ElementId are given, the ElementId is used with a warning.
+	.PARAMETER DriveId
 	Specifies the OneDrive drive id. If not set, the default drive is used.
 	.PARAMETER TargetPath
-	Save file to the target path in the same OneDrive drive (ElementID for the target path is not supported yet).
+	Save file to the target path in the same OneDrive drive (ElementId for the target path is not supported yet).
 	.PARAMETER NewName
 	The new name of the file. If missing, the file will only be moved.
 	.EXAMPLE
@@ -645,15 +705,16 @@ function Move-ODItem
 	PARAM(
 		[Parameter(Mandatory=$True)]
 		[string]$AccessToken,
+		[String]$ResourceId="",
 		[string]$Path="",
-		[string]$ElementID="",
-		[string]$DriveID="",
+		[string]$ElementId="",
+		[string]$DriveId="",
 		[string]$TargetPath="",
 		[string]$NewName=""
 	)
-	if (($ElementID+$Path) -eq "") 
+	if (($ElementId+$Path) -eq "") 
 	{
-		write-error("Path nor ElementID is set")
+		write-error("Path nor ElementId is set")
 	}
 	else
 	{
@@ -674,12 +735,12 @@ function Move-ODItem
 			}
 			if (!$TargetPath -eq "") 
 			{
-				$rTURI=Format-ODPathorIDString -path $TargetPath -DriveID $DriveID
+				$rTURI=Format-ODPathorIdString -path $TargetPath -DriveId $DriveId
 				$body=$body+'"parentReference" : {"path": "'+$rTURI+'"}'
 			}
 			$body=$body+'}'
-			$rURI=Format-ODPathorIDString -path $Path -ElementID $ElementID -DriveID $DriveID
-			return Get-ODWebContent -AccessToken $AccessToken -Method PATCH -rURI $rURI -Body $body
+			$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
+			return Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method PATCH -rURI $rURI -Body $body
 		}
 	}
 }
