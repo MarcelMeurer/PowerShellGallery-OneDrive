@@ -2,6 +2,7 @@
 *.secret*
 
 [Pp]ublish2Gallery.ps1
+.gitignore
 
 # Build results
 [Tt]est/
