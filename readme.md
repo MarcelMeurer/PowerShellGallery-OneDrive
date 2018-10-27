@@ -31,8 +31,7 @@ Before you start using the OneDrive module you have register your script/applica
 
 Read this on my blog: https://www.sepago.de/blog/onedrive-powershell-module-new-version-with-improved-authentication/
 
-- Go to: https://apps.dev.microsoft.com and login with your Microsoft Account (MSA) 	
-  "Add an app" in the category "converged applications"
+- Go to: https://apps.dev.microsoft.com and login with your Microsoft Account (MSA). "Add an app" in the category "converged applications"
   ![](https://www.sepago.de/wp-content/uploads/2017/12/oda01.png)
 
 - Enter a name and press "create"
@@ -48,12 +47,11 @@ Read this on my blog: https://www.sepago.de/blog/onedrive-powershell-module-new-
 
 - Check "Allow implicit Flow" and enter a "Redirect URL". This is not a real URL. Choose a localhost address and note it. In my case I chose: http://localhost/login
   ![](https://www.sepago.de/wp-content/uploads/2017/12/oda05.png)
-
-- Press "Save"
   ![](https://www.sepago.de/wp-content/uploads/2017/12/oda06.png)
+  
+- Press "Save"
 
-- 
-  Now you have all necessary data for your app / script:
+- Now you have all necessary data for your app / script:
 
   - Client Id: 5dd40b03-0ead-451b-b5e3-f704550e8cca
   - AppKey: xqacs8K92MuCJKgciRHQ1Cf
