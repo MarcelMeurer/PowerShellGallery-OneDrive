@@ -32,7 +32,8 @@ Before you start using the OneDrive module you have register your script/applica
 Read this on my blog: https://www.sepago.de/blog/onedrive-powershell-module-new-version-with-improved-authentication/
 
 - Go to: https://apps.dev.microsoft.com and login with your Microsoft Account (MSA) 	
-  "Add an app" in the category "converged applications"![](https://www.sepago.de/wp-content/uploads/2017/12/oda01.png)
+  "Add an app" in the category "converged applications"
+  ![](https://www.sepago.de/wp-content/uploads/2017/12/oda01.png)
 
 - Enter a name and press "create"
   ![](https://www.sepago.de/wp-content/uploads/2017/12/oda02.png)
