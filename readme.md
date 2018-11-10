@@ -15,7 +15,7 @@ Open PowerShell and
 Install-Module -Name OneDrive -Scope CurrentUser -force
 ```
 
-You can update the module to a newer version with the same command (-force). If you don’t use PowerShellGet currently, go to the Gallery on https://www.powershellgallery.com/packages/OneDrive and click "Get Started".
+You can update the module to a newer version with the same command (-force). After that you have to restart your PowerShell session. If you don’t use PowerShellGet currently, go to the Gallery on https://www.powershellgallery.com/packages/OneDrive and click "Get Started".
 
 Check your installation with
 
@@ -82,7 +82,7 @@ To use OneDrive for business you have to register your script/app to in Azure Ac
 - Within the "Required permissions" add "Office 365 SharePoint Online (Microsoft.Sharepoint)"
   ![](https://www.sepago.de/wp-content/uploads/2018/01/od4b02.png)
 
-- Select "Read and write user files"  below "delegated permissions" for the Office 365 API
+- Select "Read and write user files"  below "delegated permissions" for the Office 365 API **and** select (not in screenshot) "Read items and all site collection" below application permission to access shared files and other OneDrive drives
   ![](https://www.sepago.de/wp-content/uploads/2018/01/od4b03.png)
 
 - Generate a secrete key for this application and save it for later use. Also save the application Id
@@ -96,6 +96,7 @@ To use OneDrive for business you have to register your script/app to in Azure Ac
   - RedirectURI: http://sepago.de/1Drive4Business
 
 - Additionally you need the resource URL for OneDrive for Business. Normally: https://<tenant>-my.sharepoint.com/. In our company this is the URL "https://sepagogmbh-my.sharepoint.com/" (the last one / is important).
+
   - Resource ID: https://sepagogmbh-my.sharepoint.com/
 
 - To get an authentication token use: 
@@ -163,6 +164,49 @@ Get-ODItem -AccessToken $Auth.access_token -ResourceId "https://sepagogmbh-my.sh
 
 ```powershell
 Remove-ODItem -AccessToken $Auth.access_token -ResourceId "https://sepagogmbh-my.sharepoint.com/" -Path "/Upload/Doings.txt"
+```
+
+## Working with shared/remote files and folders
+
+Sometimes you have files and folders shared by someone others. You can list this files and download it to your local computer. To access shared files and other OneDrive drives / SharePoint **edit** your **application permission**: Add *"Read items and all site collection" below application permission* to access shared files and other OneDrive drives
+
+### Listing files shared with me
+
+```powershell
+$sharedFiles=Get-ODSharedItems -AccessToken $Auth.access_token -ResourceId "https://sepagogmbh-my.sharepoint.com/" 
+
+$sharedFiles | Select-Object -Property Name,size,folder
+```
+
+### Downloading a shared file
+
+```powershell
+$sharedFile=$sharedFiles[17]   # element 17; has to be a file - not a folder
+
+Get-ODItem -AccessToken $Auth.access_token -ResourceId "https://sepagogmbh-my.sharepoint.com/" -ElementId $sharedFile.id -DriveId $sharedFile.remoteItem.parentReference.driveId
+```
+
+### Uploading a file to a shared folder
+
+This can be a shared folder from a user or from SharePoint
+
+```powershell
+$sharedFolder=$sharedFiles[1] # where element 1 is a folder shared with you
+
+Add-ODItem -AccessToken $at -ResourceId $resourceIdGiven -LocalFile "D:\DEV\PowerShell\PowerShellGallery-OneDrive\Test\Uploads\Doings.txt" -DriveId $sharedFolder.remoteItem.parentReference.driveId -ElementId $sharedFolder.Id
+```
+
+### List OneDrive drives
+
+```powershell
+$Drives=Get-ODDrives -AccessToken $Auth.access_token -ResourceId "https://sepagogmbh-my.sharepoint.com/"
+```
+
+### List content of other OneDrive drives
+
+```powershell
+$Drives=Get-ODDrives -AccessToken $Auth.access_token -ResourceId "https://sepagogmbh-my.sharepoint.com/"
+Get-ODChildItems -AccessToken $at -ResourceId $resourceIdGiven -DriveId $Drives[0].id -Path "/Profilbilder"
 ```
 
 ## Remarks

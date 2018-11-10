@@ -143,6 +143,9 @@ function Get-ODAuthentication
 }
 function Get-ODRootUri 
 {
+	PARAM(
+		[String]$ResourceId=""
+	)
 	if ($ResourceId -ne "")
 	{
 		return $ResourceId+"_api/v2.0"
@@ -235,6 +238,7 @@ function Get-ODDrives
     Get-ODDrives -AccessToken $AuthToken
 	List all OneDrives available for your account (there is normally only one).
 	.NOTES
+	The application for OneDrive 4 Business needs "Read items in all site collections" on application level (API: Office 365 SharePoint Online)
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
@@ -242,7 +246,32 @@ function Get-ODDrives
 		[string]$AccessToken,
 		[String]$ResourceId=""
 	)
-	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method GET -rURI "/drives"
+	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method GET -rURI "/drives" 
+	return $ResponseObject.Value
+}
+
+function Get-ODSharedItems
+{
+	<#
+	.DESCRIPTION
+	Get items shared with the user
+	.PARAMETER AccessToken
+	A valid access token for bearer authorization.
+	.PARAMETER ResourceId
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
+	.EXAMPLE
+    Get-ODDrives -AccessToken $AuthToken
+	List all OneDrives available for your account (there is normally only one).
+	.NOTES
+	The application for OneDrive 4 Business needs "Read items in all site collections" on application level (API: Office 365 SharePoint Online)
+    Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
+	#>
+	PARAM(
+		[Parameter(Mandatory=$True)]
+		[string]$AccessToken,
+		[String]$ResourceId=""
+	)
+	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method GET -rURI "/drive/oneDrive.sharedWithMe"
 	return $ResponseObject.Value
 }
 
@@ -269,7 +298,13 @@ function Format-ODPathorIdString
 	{
 		# Use ElementId parameters
 		if (!$Path -eq "") {write-debug("Warning: Path and ElementId parameters are set. Only ElementId is used!")}
-		return "/drive/items/"+$ElementId
+		$drive="/drive"
+		if ($DriveId -ne "") 
+		{	
+			# Named drive
+			$drive="/drives/"+$DriveId
+		}
+		return $drive+"/items/"+$ElementId
 	}
 	else
 	{
@@ -381,10 +416,12 @@ function Get-ODChildItems
 		[Parameter(DontShow)]
 		[switch]$ItemPropertyMode,
 		[Parameter(DontShow)]
-		[string]$SearchText
+		[string]$SearchText,
+		[parameter(DontShow)]
+        [switch]$Loop=$false
 	)
 	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
-	if ($Path.Contains('$skiptoken='))
+	if ($Path.Contains('$skiptoken=') -or $Loop)
 	{	
 		# Recursive mode of odata.nextLink detection
 		write-debug("Recursive call")
@@ -429,7 +466,7 @@ function Get-ODChildItems
 	{
 		write-debug("Getting more elements form service (@odata.nextLink is present)")
 		write-debug("LAST: "+$ResponseObject.value.count)
-		Get-ODChildItems -AccessToken $AccessToken -ResourceId $ResourceId -SelectProperties $SelectProperties -Path $ResponseObject."@odata.nextLink".Replace($ODRootURI,"")
+		Get-ODChildItems -AccessToken $AccessToken -ResourceId $ResourceId -SelectProperties $SelectProperties -Path $ResponseObject."@odata.nextLink".Replace($ODRootURI,"") -Loop
 	}
 	if ($ItemPropertyMode)
 	{
@@ -663,8 +700,12 @@ function Add-ODItem
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	try
 	{
+		$spacer=""
+		if ($ElementId -ne "") {$spacer=":"}
 		$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
-		$rURI=(($ODRootURI+$rURI).TrimEnd(":")+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/content").Replace("/root/","/root:/")
+		write-host $Path
+		write-host ($ODRootURI+$rURI)
+		$rURI=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/content").Replace("/root/","/root:/")
 		return $webRequest=Invoke-WebRequest -Method PUT -InFile $LocalFile -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "multipart/form-data"  -UseBasicParsing -ErrorAction SilentlyContinue
 	}
 	catch
