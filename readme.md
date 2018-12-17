@@ -196,6 +196,54 @@ $sharedFolder=$sharedFiles[1] # where element 1 is a folder shared with you
 Add-ODItem -AccessToken $at -ResourceId $resourceIdGiven -LocalFile "D:\DEV\PowerShell\PowerShellGallery-OneDrive\Test\Uploads\Doings.txt" -DriveId $sharedFolder.remoteItem.parentReference.driveId -ElementId $sharedFolder.Id
 ```
 
+### Downloading files from OneDrive recursively
+
+Copy files recursively from OneDrive to a local folder
+
+```powershell
+function Transfer-Files ($path)
+{
+	$Content=@(Get-ODChildItems -AccessToken $at -ResourceId $resourceIdGiven -Path $path)
+	$CountFiles=@($Content|where {!$_.folder}).count
+	$CountFolders=@($Content|where {$_.folder}).count
+	if ($Verbose) {write-host("Current folder: '"+$path+"' (contains folders/files: "+$CountFolders+"/"+$CountFiles+")")}
+	$global:AllFiles+=$CountFiles
+	$global:AllFolders+=$CountFolders
+	$ErrorActionPreference = "Stop"
+	foreach ($entry in $content)
+	{
+		if ($entry.folder)
+		{
+			if ($Verbose) {write-host ("Found folder '"+$entry.name+"'")}
+			$NewPath=($path+"/"+$entry.name).Replace("//","/")
+			$NewLocalPath=$TargetPath+$NewPath.Replace("/","\")
+			if ($Verbose) {write-host ("Create local folder '"+$NewLocalPath+"'")}
+			if (!$demo) {New-Item -ItemType directory -Path $NewLocalPath -force | out-null}
+			Transfer-Files($NewPath)
+			
+		} else
+		{
+			$LocalPath=$TargetPath+$path.Replace("/","\")
+			if ($Verbose) {write-host("Download file "+$entry.name+ " to "+$LocalPath)}
+			if (!$demo) {$ReturnCode=Get-ODItem -AccessToken $at -ResourceId $resourceIdGiven -ElementID $entry.id -LocalPath $LocalPath}
+			$global:size+=$entry.size
+		}
+	}
+}
+
+$global:size=0
+$global:AllFiles=0
+$global:AllFolders=0
+$Verbose=$true
+$TargetPath="D:\DEV\PowerShell\PowerShellGallery-OneDrive\Test\Downloads\Backup"
+
+Transfer-Files "\Working Folder\Data Analytics"
+	
+write-host ("Number of files:    "+$global:AllFiles)
+write-host ("Number of folders:  "+$global:AllFolders)
+write-host ("Bytes transfered:   {0:N0}" -f $global:Size)
+```
+
 ### List OneDrive drives
 
 ```powershell
@@ -221,3 +269,4 @@ Links:
 
 
 Feel free to contribute. If you want to stay informed follow this GitHub repo and me on Twitter: https://twitter.com/MarcelMeurer
+
