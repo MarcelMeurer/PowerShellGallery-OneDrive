@@ -60,7 +60,7 @@ Read this on my blog: https://www.sepago.de/blog/onedrive-powershell-module-new-
 - To get an authentication token use: 
 
   ```powershell
-  $Auth=Get-ODAuthentication -ClientID 5dd40b03-0ead-451b-b5e3-f704550e8cca -AppKey xqacs8K92MuCJKgciRHQ1Cf -RedirectURI http://localhost/login
+  $Auth=Get-ODAuthentication -ClientID 5dd40b03-0ead-451b-b5e3-f704550e8cca -AppKey "xqacs8K92MuCJKgciRHQ1Cf" -RedirectURI http://localhost/login
   ```
 
 
@@ -110,7 +110,7 @@ To use OneDrive for business you have to register your script/app to in Azure Ac
 An access token is 1 hour valid. You can get a new access token with the refresh token provided by the last authentication. This is necessary if you are creating a script that will work for a long time without further user input. Renew your access token automatically in the program code.
 
 ```powershell
-$Auth=Get-ODAuthentication -ClientId 2831fc52-e1b8-4493-9f3a-a3dad74b2081 -AppKey "TqoSXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX=" -RedirectURI "http://sepago.de/1Drive4Business" -ResourceId "https://sepagogmbh-my.sharepoint.com/" -RefreshToken $LastAuth.refresh_token
+$Auth=Get-ODAuthentication -ClientId "2831fc52-e1b8-4493-9f3a-a3dad74b2081" -AppKey "TqoSXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX=" -RedirectURI "http://sepago.de/1Drive4Business" -ResourceId "https://sepagogmbh-my.sharepoint.com/" -RefreshToken $LastAuth.refresh_token
 ```
 
 - Where $LastAuth is your last authentication result (containing the refresh token)
