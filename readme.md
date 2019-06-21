@@ -160,6 +160,8 @@ Get-ODItem -AccessToken $Auth.access_token -ResourceId "https://sepagogmbh-my.sh
 Get-ODItem -AccessToken $Auth.access_token -ResourceId "https://sepagogmbh-my.sharepoint.com/" -Path "/Upload/Doings.txt" -LocalPath "D:\DEV\PowerShell\PowerShellGallery-OneDrive\Test\Downloads" -LocalFileName "Copy from OneDrive.Doings.txt"
 ```
 
+Hint: From version 2.2 downloaded files keep their timestamp.
+
 ### Delete a file in OneDrive
 
 ```powershell

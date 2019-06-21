@@ -17,6 +17,10 @@ function Get-ODAuthentication
 	In token mode the accept button in the web form is pressed automatically.
 	.PARAMETER RedirectURI
 	Code authentication requires a correct URI. Use the same as in the app registration e.g. http://localhost/logon. Default is https://login.live.com/oauth20_desktop.srf. Don't use this parameter for token-based authentication. 
+	.PARAMETER DontShowLoginScreen
+	Suppresses the logon screen. Be careful: If you suppress the logon screen you cannot logon if your credentials are not passed through. 
+	.PARAMETER LogOut
+	Performs a logout. 
 
 	.EXAMPLE
     $Authentication=Get-ODAuthentication -ClientId "0000000012345678"
@@ -33,6 +37,7 @@ function Get-ODAuthentication
 		[string]$AppKey="",
 		[string]$RefreshToken="",
 		[string]$ResourceId="",
+		[switch]$DontShowLoginScreen=$false,
 		[switch]$AutoAccept,
 		[switch]$LogOut
 	)
@@ -101,6 +106,11 @@ function Get-ODAuthentication
 		}
 		$web.Add_DocumentCompleted($DocComplete)
 		$form.Controls.Add($web)
+		if ($DontShowLoginScreen)
+		{
+			write-debug("Logon screen suppressed by flag -DontShowLoginScreen")
+			$form.Opacity = 0.0;
+		}
 		$form.showdialog() | out-null
 		# Build object from last URI (which should contains the token)
 		$ReturnURI=($web.Url).ToString().Replace("#","&")
@@ -639,7 +649,7 @@ function Get-ODItem
 	}
 	else
 	{
-		$Download=Get-ODItemProperty -AccessToken $AccessToken -ResourceId $ResourceId -Path $Path -ElementId $ElementId -DriveId $DriveId -SelectProperties "name,@content.downloadUrl"
+		$Download=Get-ODItemProperty -AccessToken $AccessToken -ResourceId $ResourceId -Path $Path -ElementId $ElementId -DriveId $DriveId -SelectProperties "name,@content.downloadUrl,lastModifiedDateTime"
 		if ($LocalPath -eq "") {$LocalPath=Get-Location}
 		if ($LocalFileName -eq "")
 		{
@@ -654,6 +664,8 @@ function Get-ODItem
 			[System.Net.WebClient]::WebClient
 			$client = New-Object System.Net.WebClient
 			$client.DownloadFile($Download."@content.downloadUrl",$SaveTo)
+			$file = Get-Item $saveTo
+            $file.LastWriteTime = $Download.lastModifiedDateTime
 			write-verbose("Download complete")
 			return 0
 		}
