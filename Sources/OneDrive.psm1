@@ -715,13 +715,138 @@ function Add-ODItem
 		$spacer=""
 		if ($ElementId -ne "") {$spacer=":"}
 		$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
-		write-host $Path
-		write-host ($ODRootURI+$rURI)
 		$rURI=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/content").Replace("/root/","/root:/")
 		return $webRequest=Invoke-WebRequest -Method PUT -InFile $LocalFile -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "multipart/form-data"  -UseBasicParsing -ErrorAction SilentlyContinue
 	}
 	catch
 	{
+		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
+		return -1
+	}	
+}
+function Add-ODItemLarge {
+	<#
+		.DESCRIPTION
+		Upload a large file with an upload session. Warning: Existing files will be overwritten.
+		For reference, see: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_createuploadsession?view=odsp-graph-online
+		.PARAMETER AccessToken
+		A valid access token for bearer authorization.
+		.PARAMETER ResourceId
+		Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
+		.PARAMETER Path
+		Specifies the path for the upload folder. If not given, the path is "/".
+		.PARAMETER ElementId
+		Specifies the element id for the upload folder. If Path and ElementId are given, the ElementId is used with a warning.
+		.PARAMETER DriveId
+		Specifies the OneDrive drive id. If not set, the default drive is used.
+		.PARAMETER LocalFile
+		Path and file of the local file to be uploaded (C:\data\data.csv).
+		.EXAMPLE
+		Add-ODItem -AccessToken $AuthToken -Path "/Data/documents/2016" -LocalFile "AzureML with PowerShell.docx" 
+		Upload a file to OneDrive "/data/documents/2016"
+		.NOTES
+		Author: Benke Tamás - (funkeninduktor@gmail.com)
+	#>
+	
+	PARAM(
+		[Parameter(Mandatory=$True)]
+		[string]$AccessToken,
+		[String]$ResourceId="",
+		[string]$Path="/",
+		[string]$ElementId="",
+		[string]$DriveId="",
+		[Parameter(Mandatory=$True)]
+		[string]$LocalFile=""
+	)
+	
+	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
+	Try	{
+		# Begin to construct the real (full) URI
+		$spacer=""
+		if ($ElementId -ne "") {$spacer=":"}
+		$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
+		
+		# Construct the real (full) URI
+		$rURI=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/createUploadSession").Replace("/root/","/root:/")
+		
+		# Initialize upload session
+		$webRequest=Invoke-WebRequest -Method PUT -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -UseBasicParsing -ErrorAction SilentlyContinue
+
+		# Parse the response JSON (into a holder variable)
+		$convertResponse = ($webRequest.Content | ConvertFrom-Json)
+		# Get the uploadUrl from the response (holder variable)
+		$uURL = $convertResponse.uploadUrl
+		# echo "HERE COMES THE CORRECT uploadUrl: $uURL"
+		
+		# Get the full size of the file to upload (bytes)
+		$totalLength = (Get-Item $LocalFile).length
+		# echo "Total file size (bytes): $totalLength"
+		
+		# Set the upload chunk size (Recommended: 5MB)
+		$uploadLength = 5 * 1024 * 1024; # == 5242880 byte == 5MB.
+		# echo "Size of upload fragments (bytes): $uploadLength" # == 5242880
+		
+		# Set the starting byte index of the upload (i. e.: the index of the first byte of the file to upload)
+		$startingIndex = 0
+		
+		# Start an endless cycle to run until the last chunk of the file is uploaded (after that, BREAK out of the cycle)
+		while($True){
+			# If startingIndex (= the index of the starting byte) is greater than, or equal to totalLength (= the total length of the file), stop execution, so BREAK out of the cycle
+			if( $startingIndex -ge $totalLength ){
+				break
+			}
+			
+			# Otherwise: set the suitable indices (variables)
+			
+			# (startingIndex remains as it was!)
+			
+			# Set the size of the chunk to upload
+			# The remaining length of the file (to be uploaded)
+			$remainingLength = $($totalLength-$startingIndex)
+			# If remainingLength is smaller than the normal upload length (defined above as uploadLength), then the new uploadLength will be the remainingLength (self-evidently, only for the last upload chunk)
+			if( $remainingLength -lt $uploadLength ){
+				$uploadLength = $remainingLength
+			}
+			# Set the new starting index (just for the next iteration!)
+			$newStartingIndex = $($startingIndex+$uploadLength)
+			# Get the ending index (by means of newStartingIndex)
+			$endingIndex = $($newStartingIndex-1)
+			
+			# Get the bytes to upload into a byte array (using properly re-initialized variables)
+			$buf = new-object byte[] $uploadLength
+			$fs = new-object IO.FileStream($LocalFile, [IO.FileMode]::Open)
+			$reader = new-object IO.BinaryReader($fs)
+			$reader.BaseStream.Seek($startingIndex,"Begin") | out-null
+			$reader.Read($buf, 0, $uploadLength)| out-null
+			$reader.Close()
+			# echo "Chunk size is: $($buf.count)"
+			
+			# Upoad the actual file chunk (byte array) to the actual upload session.
+			# Some aspects of the chunk upload:
+				# We don't have to authenticate for the chunk uploads, since the uploadUrl contains the upload session's authentication data as well.
+				# We above calculated the length, and starting and ending byte indices of the actual chunk, and the total size of the (entire) file. These should be set into the upload's PUT request headers.
+				# If the upload session is alive, every file chunk (including the last one) should be uploaded with the same command syntax.
+				# If the last chunk was uploaded, the file is automatically created (and the upload session is closed).
+				# The (default) length of an upload session is about 15 minutes!
+			
+			# Set the headers for the actual file chunk's PUT request (by means of the above preset variables)
+			$actHeaders=@{"Content-Length"="$uploadLength"; "Content-Range"="bytes $startingIndex-$endingIndex/$totalLength"};
+			
+			# Execute the PUT request (upload file chunk)
+			write-debug("Uploading chunk of bytes. Progress: "+$endingIndex/$totalLength*100+" %")
+			$uploadResponse=Invoke-WebRequest -Method PUT -Uri $uURL -Headers $actHeaders -Body $buf -UseBasicParsing -ErrorAction SilentlyContinue
+			
+			# startingIndex should be incremented (with the size of the actually uploaded file chunk) for the next iteration.
+			# (Since the new value for startingIndex was preset above, as newStartingIndex, here we just have to overwrite startingIndex with it!)
+			$startingIndex = $newStartingIndex
+		}
+		# The upload is done!
+		
+		# At the end of the upload, write out the last response, which should be a confirmation message: "HTTP/1.1 201 Created"
+		write-debug("Upload complete")
+		return ($uploadResponse.Content | ConvertFrom-Json)
+	}
+	Catch {
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		return -1
 	}	

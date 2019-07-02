@@ -7,6 +7,20 @@ This OneDrive version (2.0.0 and higher in PowerShellGallery.com) supports:
 - [x] OneDrive personal
 - [x] OneDrive for Business
 
+
+
+## What's new
+
+Version 2.2.1		
+
+- Upload support for larger files: *Add-ODItemLarge*
+  Typically files larger then 10 MBytes. Uploading this files is not stable with the standard upload process used by *Add-ODItem*. Thanks to Benke Tamás (funkeninduktor@gmail.com) for sharing this function
+
+Version 2.2.0
+
+- Downloaded files keeping their time stamps from know
+  Bevor: A downloaded file get the current time as time stamp (created at)
+
 ## Installation
 
 Open PowerShell and
@@ -142,6 +156,12 @@ New-ODFolder -AccessToken $Auth.access_token -ResourceId "https://sepagogmbh-my.
 
 ```powershell
 Add-ODItem -AccessToken $Auth.access_token -ResourceId "https://sepagogmbh-my.sharepoint.com/" -LocalFile "D:\DEV\PowerShell\PowerShellGallery-OneDrive\Test\Uploads\IoT Workshop.pptx" -Path "/Upload" 
+```
+
+### Upload a large local files to OneDrive
+
+```powershell
+Add-ODItemLarge -AccessToken $Auth.access_token -ResourceId "https://sepagogmbh-my.sharepoint.com/" -LocalFile "D:\DEV\PowerShell\PowerShellGallery-OneDrive\Test\Uploads\IoT Workshop.mp4" -Path "/Upload" 
 ```
 
 ### List OneDrive drives
