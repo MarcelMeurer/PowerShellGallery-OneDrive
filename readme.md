@@ -105,7 +105,7 @@ To use OneDrive for business you have to register your script/app to in Azure Ac
   - SharePoint - Delegated permission - MyFilesWrite
   
   
-  ![](./media/OD4b-Register-03.png)
+  ![](./Media/OD4b-Register-03.png)
   
   
   
