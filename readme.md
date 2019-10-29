@@ -91,12 +91,12 @@ To use OneDrive for business you have to register your script/app to in Azure Ac
 
 - Give your application a name and configure the redirect URI. The sign-on URL has to be a valid URL but doesn't have to exist. E.g.: http://localhost/1Drive4Business (make later sure that this url is in the reply url list of your application)
 
-  ![](media/OD4b-Register-01.png)
+  ![](./media/OD4b-Register-01.png)
 
 - Click "Register" to create the Azure application.
   
 - Next go to "Authentication" and enable "ID tokens" - Save the change
-  ![](media/OD4b-Register-02.png)
+  ![](./media/OD4b-Register-02.png)
 
 - Click on API permissions and add the following permissions:
   
@@ -105,13 +105,13 @@ To use OneDrive for business you have to register your script/app to in Azure Ac
   - SharePoint - Delegated permission - MyFilesWrite
   
   
-  ![](media/OD4b-Register-03.png)
+  ![](./media/OD4b-Register-03.png)
   
   
   
 - Generate a secrete key for this application and save it for later use. Also save the application Id
-  ![](media/OD4b-Register-04.png)
-  ![](media/OD4b-Register-05.png)
+  ![](./media/OD4b-Register-04.png)
+  ![](./media/OD4b-Register-05.png)
 
 - You should now have the following parameter:
 
