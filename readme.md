@@ -87,21 +87,31 @@ To use OneDrive for business you have to register your script/app to in Azure Ac
 
 - Add an application in Azure Active Directory inside the Azure portal: https://portal.azure.com/#blade/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/RegisteredApps
 
-- Chose "New application registration"
+- Chose "New registration"
 
-- Give your application a name and an unique sign-on URL. The sign-on URL has to be a valid URL but doesn't have to exist. E.g.: http://sepago.de/1Drive4Business (make later sure that this url is in the reply url list of your application)
+- Give your application a name and configure the redirect URI. The sign-on URL has to be a valid URL but doesn't have to exist. E.g.: http://localhost/1Drive4Business (make later sure that this url is in the reply url list of your application)
 
-  ![](https://www.sepago.de/wp-content/uploads/2018/01/od4b01.png)
+  ![](media/OD4b-Register-01.png)
 
-- Within the "Required permissions" add "Office 365 SharePoint Online (Microsoft.Sharepoint)"
-  ![](https://www.sepago.de/wp-content/uploads/2018/01/od4b02.png)
+- Click "Register" to create the Azure application.
+  
+- Next go to "Authentication" and enable "ID tokens" - Save the change
+  ![](media/OD4b-Register-02.png)
 
-- Select "Read and write user files"  below "delegated permissions" for the Office 365 API **and** select (not in screenshot) "Read items and all site collection" below application permission to access shared files and other OneDrive drives
-  ![](https://www.sepago.de/wp-content/uploads/2018/01/od4b03.png)
-
+- Click on API permissions and add the following permissions:
+  
+- Azure Active Directory Graph - Delegated permission - User.Read
+  - SharePoint - Delegated permission - MyFilesRead
+  - SharePoint - Delegated permission - MyFilesWrite
+  
+  
+  ![](media/OD4b-Register-03.png)
+  
+  
+  
 - Generate a secrete key for this application and save it for later use. Also save the application Id
-  ![](https://www.sepago.de/wp-content/uploads/2018/01/od4b04.png)
-  ![](https://www.sepago.de/wp-content/uploads/2018/01/od4b05_0.png)
+  ![](media/OD4b-Register-04.png)
+  ![](media/OD4b-Register-05.png)
 
 - You should now have the following parameter:
 
