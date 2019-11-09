@@ -276,6 +276,108 @@ write-host ("Number of folders:  "+$global:AllFolders)
 write-host ("Bytes transfered:   {0:N0}" -f $global:Size)
 ```
 
+### Uploading files to OneDrive recursively
+
+Copy files recursively from LocalPath to OneDrive, with color codes.
+Will upload recursively, only missing and different files, comparison on file size only.
+
+```powershell
+function pause () { if ($pause) {Read-Host -Prompt "Press Enter to continue"}}
+
+# upload recursively, only missing and different files, comparison on file size only
+function Upload-Files ($LocalPath, $RemotePath)
+{
+  $localContent=@(Get-ChildItem -Directory $LocalPath; Get-ChildItem -File $LocalPath)
+  $CountFilesLocal=@($localContent | ?{ -not $_.PSIsContainer }).count
+  $CountFoldersLocal=@($localContent | ?{ $_.PSIsContainer }).count
+  
+  $remoteContent=@(Get-ODChildItems -AccessToken $Auth.access_token -ResourceId $ResourceId -Path $RemotePath)
+  $CountFilesRemote=@($remoteContent | where {!$_.folder}).count
+  $CountFoldersRemote=@($remoteContent | where {$_.folder}).count
+  
+  "Processing    {0}{1,-60} ({2,-2}/{3,-2}) -> {4} ({5}/{6})" -f "", $LocalPath, $CountFoldersLocal, $CountFilesLocal, $RemotePath, $CountFoldersRemote, $CountFilesRemote| Write-Host -ForegroundColor Cyan;
+  pause
+  
+  $global:AllFilesLocal+=$CountFilesLocal
+  $global:AllFoldersLocal+=$CountFoldersLocal
+  $global:AllFilesRemote+=$CountFilesRemote
+  $global:AllFoldersRemote+=$CountFoldersRemote
+  $ErrorActionPreference = "Stop"
+  foreach ($LocalEntry in $localContent)
+  {
+    if ($LocalEntry | ?{ $_.PSIsContainer })
+    {
+      if ($null -ne ($excludedFolders | ?{ $LocalEntry.name -match $_ })) {
+        if ($Verbose) {"Folder SKIP E {0}" -f $LocalEntry.name | Write-Host -ForegroundColor DarkGray}; 
+        $global:skipped+=1
+        continue
+      }
+      if (($localContent | ?{ -not $_.PSIsContainer }).Name -contains $LocalEntry.name+'.7z') {
+        if ($Verbose) {"Folder SKIP Z {0}" -f $LocalEntry.name | Write-Host -ForegroundColor DarkGray}; 
+        $global:skipped+=1
+        continue
+      }
+
+      ####################### FOLDERS
+      if ($Verbose) {write-host ("Folder new    "+$LocalEntry.name)}
+      $NewLocalPath=($LocalPath+'\'+$LocalEntry.name).Replace("\\","\")
+      $NewRemotePath=$RemotePath+'/'+$LocalEntry.name
+      if (-not $remoteContent | Where-Object {$_.name -eq $LocalEntry.name}) {
+        "Folder CREATE {0,-60}         +> {1}" -f "", $NewRemotePath | Write-Host -ForegroundColor DarkGreen
+        if (!$Demo) {New-ODFolder AccessToken $Auth.access_token -ResourceId $ResourceId -path $RemotePath -FolderName $LocalEntry.name}
+        $global:AllFolders+=1
+      }
+
+      if ($Debug) {"RECURSE       {0,-60}         +> {1}" -f $NewLocalPath, $NewRemotePath | Write-Host -ForegroundColor Magenta; pause}
+      Upload-Files $NewLocalPath $NewRemotePath
+      
+    } else
+    {
+      if ($null -ne ($excludedFiles | ?{ $LocalEntry.name -match $_ })) {
+        if ($Verbose) {"File   SKIP E {0,-60}" -f $LocalEntry.name | Write-Host -ForegroundColor DarkGray}; 
+        $global:skipped+=1
+        continue
+      }
+
+      ####################### FILES
+      $remoteSize=($remoteContent | Where-Object {$_.name -eq $LocalEntry.name}).size
+      $localSize=$LocalEntry.length
+      $color='DarkGreen'
+      if ($remoteSize -ne $localSize) {
+        $color=@{$true = 'DarkGreen'; $false = 'Green'}[$remoteSize -ne $null]
+        "File   UP     {0,-60}         -> {1} - {2}:{3}" -f $LocalEntry.name, $RemotePath, $localSize, $remoteSize | Write-Host -ForegroundColor $color
+        if (!$Demo) {$ReturnCode=Add-ODItem -AccessToken $Auth.access_token -ResourceId $ResourceId -LocalFile $LocalEntry.FullName -Path $RemotePath}
+        $global:AllFiles+=1
+        $global:size+=$LocalEntry.length
+      } else {
+        if ($Verbose) {"File   SKIP   {0,-60}         -> {1} - {2}:{3}" -f $LocalEntry.name, $RemotePath, $localSize, $remoteSize | Write-Host -ForegroundColor DarkGray}
+      }
+    }
+  }
+}
+
+$global:skipped=0
+$global:size=0
+$global:AllFiles=0
+$global:AllFolders=0
+
+$Demo=$false
+$Debug=$false
+$Verbose=$false
+$pause=$false
+
+$excludedFolders=@('^archive$','^_TODO', 'folder name to exclude', 'logs')
+$excludedFiles=@('_TODO*','.log$')
+$LocalPath='.'
+$RemotePath='/remote/path'
+
+Upload-Files $LocalPath $RemotePath
+
+write-host ("Number of files:    "+$global:AllFiles)
+write-host ("Number of folders:  "+$global:AllFolders)
+write-host ("Bytes transfered:   {0:N0}" -f $global:Size)
+```
+
 ### List OneDrive drives
 
 ```powershell
