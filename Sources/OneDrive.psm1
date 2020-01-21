@@ -651,13 +651,14 @@ function Get-ODItem
 	{
 		$Download=Get-ODItemProperty -AccessToken $AccessToken -ResourceId $ResourceId -Path $Path -ElementId $ElementId -DriveId $DriveId -SelectProperties "name,@content.downloadUrl,lastModifiedDateTime"
 		if ($LocalPath -eq "") {$LocalPath=Get-Location}
+		$LocalPath=resolve-Path ($LocalPath.TrimEnd("\")+"\")
 		if ($LocalFileName -eq "")
 		{
-			$SaveTo=$LocalPath.TrimEnd("\")+"\"+$Download.name
+			$SaveTo=$LocalPath+$Download.name
 		}
 		else
 		{
-			$SaveTo=$LocalPath.TrimEnd("\")+"\"+$LocalFileName		
+			$SaveTo=$LocalPath+$LocalFileName		
 		}
 		try
 		{
