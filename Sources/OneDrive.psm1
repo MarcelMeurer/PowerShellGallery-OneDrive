@@ -1066,8 +1066,7 @@ for ($i=0;$i -lt $folder.length;$i++) {
 for ($x=0;$X -lt $folderName.length;$x++) {
 $path1+=$folder[$i]+$folderName[$x]+'/'
 $itempath=$folder[$i]+$folderName[$x]+"/"
-$null=New-Item -path "$itempath" -itemtype Directory -force
-#$folder[$i] -Name $folderName[$x]}}
+$null=New-Item -path "$itempath" -itemtype Directory -force}}
 $folderID|%{$url+="$yuan$_$key"}
 Remove-variable folderName,folderID  -force}
 for ($x=0;$x -lt $URL.length;$x++){
@@ -1084,8 +1083,7 @@ RelationshipName=$RelationshipName[$i]
 path= $path1[$x]+$RelationshipName[$i]
 url=($yuan+$ResourceID[$i]+$key)}}
 [array]$folderID=$dd.folder.ResourceID
-[array]$folderName=$dd.folder.RelationshipName
-#if ($folderID -eq $null){break}}
+[array]$folderName=$dd.folder.RelationshipName}
 } until ($folderID -eq $null)
 $script=@()
 For ( $x=0; $x -lt $data.length;$x++){
