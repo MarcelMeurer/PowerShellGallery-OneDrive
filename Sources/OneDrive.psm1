@@ -68,8 +68,9 @@ function Get-ODAuthentication
 	} else
 	{
 		write-debug("Authentication mode: " +$Type)
-		[Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | out-null
-		$Verify= -not($?)
+		$ErrorActionPreference="SilentlyContinue"
+		$null=[Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") 
+		$Verify= $?
 		[Reflection.Assembly]::LoadWithPartialName("System.Drawing") | out-null
 		[Reflection.Assembly]::LoadWithPartialName("System.Web") | out-null
 		if ($Logout)
@@ -109,13 +110,23 @@ function Get-ODAuthentication
 		}
 		$web.Add_DocumentCompleted($DocComplete)
 		$form.Controls.Add($web)
-		}
-		if ($DontShowLoginScreen -or $Verify)
+		if ($DontShowLoginScreen -or -not($Verify))
 		{
 			write-debug("Logon screen suppressed by flag -DontShowLoginScreen")
 			$form.Opacity = 0.0;
 		}
 		$form.showdialog() | out-null
+		}else{
+		@("A refresh token is given. Try to refresh it in code mode.",$URIGetAccessToken)|out-host
+		$regex= 'access_token=[^&]+'
+		do {
+		$key=read-host -prompt 'URL'
+		if (-not($key -match $regex)){write-host 'ERROR' -ForegroundColor DarkCyan|out-host}
+		}until($key -match $regex)
+		$Global:ODAccessToken=($key|select-string -pattern '(?<=token=)[^&]+' ).matches.value
+		$Global:odtokentime=get-date
+		$web=[PSobject]@{Url=$key}
+		}
 		# Build object from last URI (which should contains the token)
 		$ReturnURI=($web.Url).ToString().Replace("#","&")
 		if ($LogOut) {return "Logout"}
@@ -225,14 +236,14 @@ if(-not($?)){break}}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try {
 		$webRequest=Invoke-WebRequest -Method $Method -Uri ($ODRootURI+$rURI) -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -Body $xBody -UseBasicParsing -ErrorAction SilentlyContinue
-		$errorcode=$?
 	} 
 	catch
 	{
 		write-error("Cannot access the api. Webrequest return code is: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
-		break
 	}
+		$errorcode=$?
 }until($errorcode -or $doCount -ne 1)
+if (-not($errorcode)){break}
 	switch ($webRequest.StatusCode) 
     { 
         200 
@@ -749,15 +760,15 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 		$spacer=""
 		if ($ElementId -ne "") {$spacer=":"}
 		$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
-		$rURI=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/content").Replace("/root/","/root:/")
-		return $webRequest=Invoke-WebRequest -Method PUT -InFile $LocalFile -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "multipart/form-data"  -UseBasicParsing -ErrorAction SilentlyContinue
-		$errorcode=$?
+		$ruri1=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/content").Replace("/root/","/root:/")
+		return $webRequest=Invoke-WebRequest -Method PUT -InFile $LocalFile -Uri $rURI1 -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "multipart/form-data"  -UseBasicParsing -ErrorAction SilentlyContinue|%{$_.content}|convertfrom-json
 	}
 	catch
 	{
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
-		return -1
+		#return -1
 	}	
+	$errorcode=$?
 }until($errorcode -or $doCount -ne 1)
 }
 function Add-ODItemLarge {
@@ -813,11 +824,10 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 		$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 		
 		# Construct the real (full) URI
-		$rURI=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/createUploadSession").Replace("/root/","/root:/")
+		$rURI1=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/createUploadSession").Replace("/root/","/root:/")
 		
 		# Initialize upload session
-		$webRequest=Invoke-WebRequest -Method PUT -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -UseBasicParsing -ErrorAction SilentlyContinue
-		$errorcode=$?
+		$webRequest=Invoke-WebRequest -Method PUT -Uri $rURI1 -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -UseBasicParsing -ErrorAction SilentlyContinue
 
 		# Parse the response JSON (into a holder variable)
 		$convertResponse = ($webRequest.Content | ConvertFrom-Json)
@@ -895,8 +905,9 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	}
 	Catch {
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
-		return -1
-	}	
+		#return -1
+	}
+	$errorcode=$?
 }until($errorcode -or $doCount -ne 1)
 }
 function Move-ODItem
