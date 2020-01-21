@@ -165,6 +165,9 @@ function Get-ODAuthentication
 		write-warning("There is maybe an errror, because there is no access_token!")
 	}
 	$Authentication | add-member Noteproperty "ClientId" ($ClientId)
+	if ($ResourceId){
+	$Authentication | add-member Noteproperty "ResourceId" ($ResourceId)
+	}
 	if($enableglobal){
 	$Global:Authentication=$Authentication
 	}
@@ -224,15 +227,15 @@ function Get-ODWebContent
 	}
 	
 	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
+	$string=@()
+	$string=@{ enableglobal=$true}
+	if($Authentication -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ResourceId -and -not($ResourceId)){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId){$string=@{ResourceId=$ResourceId}}
 do{
 $doCount++
 if($doCount -ne 1){
-if ($Authentication -ne $null ) {
-$null=Get-ODAuthentication -ClientId $Authentication.ClientId -enableglobal
-if(-not($?)){break}
-}
-else{$null=Get-ODAuthentication -enableglobal
-if(-not($?)){break}}}
+$null=Get-ODAuthentication @string
+if(-not($?)){break}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try {
 		$webRequest=Invoke-WebRequest -Method $Method -Uri ($ODRootURI+$rURI) -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -Body $xBody -UseBasicParsing -ErrorAction SilentlyContinue
@@ -745,15 +748,15 @@ function Add-ODItem
 		[string]$LocalFile=""
 	)
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
+	$string=@()
+	$string=@{ enableglobal=$true}
+	if($Authentication -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ResourceId -and -not($ResourceId)){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId){$string=@{ResourceId=$ResourceId}}
 do{
 $doCount++
 if($doCount -ne 1){
-if ($Authentication -ne $null ) {
-$null=Get-ODAuthentication -ClientId $Authentication.ClientId -enableglobal
-if(-not($?)){break}
-}
-else{$null=Get-ODAuthentication -enableglobal
-if(-not($?)){break}}}
+$null=Get-ODAuthentication @string
+if(-not($?)){break}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try
 	{
@@ -807,15 +810,15 @@ function Add-ODItemLarge {
 	)
 
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
+	$string=@()
+	$string=@{ enableglobal=$true}
+	if($Authentication -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ResourceId -and -not($ResourceId)){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId){$string=@{ResourceId=$ResourceId}}
 do{
 $doCount++
 if($doCount -ne 1){
-if ($Authentication -ne $null ) {
-$null=Get-ODAuthentication -ClientId $Authentication.ClientId -enableglobal
-if(-not($?)){break}
-}
-else{$null=Get-ODAuthentication -enableglobal
-if(-not($?)){break}}}
+$null=Get-ODAuthentication @string
+if(-not($?)){break}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	Try	{
 		# Begin to construct the real (full) URI
