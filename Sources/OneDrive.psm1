@@ -39,7 +39,8 @@ function Get-ODAuthentication
 		[string]$ResourceId="",
 		[switch]$DontShowLoginScreen=$false,
 		[switch]$AutoAccept,
-		[switch]$LogOut
+		[switch]$LogOut,
+		[switch]$enableglobal
 	)
 	$optResourceId=""
 	$optOauthVersion="/v2.0"
@@ -67,7 +68,8 @@ function Get-ODAuthentication
 	} else
 	{
 		write-debug("Authentication mode: " +$Type)
-		[Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | out-null
+		$ErrorActionPreference="SilentlyContinue"
+		if([Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") ){$Verify}
 		[Reflection.Assembly]::LoadWithPartialName("System.Drawing") | out-null
 		[Reflection.Assembly]::LoadWithPartialName("System.Web") | out-null
 		if ($Logout)
@@ -87,6 +89,7 @@ function Get-ODAuthentication
 				$URIGetAccessToken="https://login.live.com/oauth20_authorize.srf?client_id="+$ClientId+"&scope="+$Scope+"&response_type="+$Type+"&redirect_URI="+$RedirectURI
 			}
 		}
+		if($Verify){
 		$form = New-Object Windows.Forms.Form
 		$form.text = "Authenticate to OneDrive"
 		$form.size = New-Object Drawing.size @(700,600)
@@ -106,6 +109,7 @@ function Get-ODAuthentication
 		}
 		$web.Add_DocumentCompleted($DocComplete)
 		$form.Controls.Add($web)
+		}
 		if ($DontShowLoginScreen)
 		{
 			write-debug("Logon screen suppressed by flag -DontShowLoginScreen")
@@ -149,6 +153,10 @@ function Get-ODAuthentication
 	{
 		write-warning("There is maybe an errror, because there is no access_token!")
 	}
+	$Authentication | add-member Noteproperty "ClientId" ($ClientId)
+	if($enableglobal){
+	$Global:Authentication=$Authentication
+	}
 	return $Authentication 
 }
 function Get-ODRootUri 
@@ -187,7 +195,7 @@ function Get-ODWebContent
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
 		[string]$rURI = "",
@@ -203,15 +211,28 @@ function Get-ODWebContent
 	{
 		$xBody=$Body
 	}
+	
 	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
+do{
+$doCount++
+if($doCount -ne 1){
+if ($Authentication -ne $null ) {
+$null=Get-ODAuthentication -ClientId $Authentication.ClientId -enableglobal
+if(-not($?)){break}
+}
+else{$null=Get-ODAuthentication -enableglobal
+if(-not($?)){break}}}
+if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try {
 		$webRequest=Invoke-WebRequest -Method $Method -Uri ($ODRootURI+$rURI) -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -Body $xBody -UseBasicParsing -ErrorAction SilentlyContinue
+		$errorcode=$?
 	} 
 	catch
 	{
 		write-error("Cannot access the api. Webrequest return code is: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		break
 	}
+}until($errorcode -or $doCount -ne 1)
 	switch ($webRequest.StatusCode) 
     { 
         200 
@@ -252,7 +273,7 @@ function Get-ODDrives
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId=""
 	)
@@ -277,7 +298,7 @@ function Get-ODSharedItems
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId=""
 	)
@@ -377,7 +398,7 @@ function Get-ODItemProperty
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[string]$ResourceId="",
 		[string]$Path="/",
@@ -416,7 +437,7 @@ function Get-ODChildItems
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
 		[string]$Path="/",
@@ -430,6 +451,7 @@ function Get-ODChildItems
 		[parameter(DontShow)]
         [switch]$Loop=$false
 	)
+
 	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 	if ($Path.Contains('$skiptoken=') -or $Loop)
 	{	
@@ -517,10 +539,10 @@ function Search-ODItems
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$true,Position=0)]
 		[string]$SearchText,
 		[string]$Path="/",
 		[string]$ElementId="",
@@ -554,7 +576,7 @@ function New-ODFolder
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
 		[Parameter(Mandatory=$True)]
@@ -590,7 +612,7 @@ function Remove-ODItem
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
 		[string]$Path="",
@@ -634,7 +656,7 @@ function Get-ODItem
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
 		[string]$Path="",
@@ -649,6 +671,7 @@ function Get-ODItem
 	}
 	else
 	{
+
 		$Download=Get-ODItemProperty -AccessToken $AccessToken -ResourceId $ResourceId -Path $Path -ElementId $ElementId -DriveId $DriveId -SelectProperties "name,@content.downloadUrl,lastModifiedDateTime"
 		if ($LocalPath -eq "") {$LocalPath=Get-Location}
 		$LocalPath=resolve-Path ($LocalPath.TrimEnd("\")+"\")
@@ -701,7 +724,7 @@ function Add-ODItem
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
 		[string]$Path="/",
@@ -711,6 +734,16 @@ function Add-ODItem
 		[string]$LocalFile=""
 	)
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
+do{
+$doCount++
+if($doCount -ne 1){
+if ($Authentication -ne $null ) {
+$null=Get-ODAuthentication -ClientId $Authentication.ClientId -enableglobal
+if(-not($?)){break}
+}
+else{$null=Get-ODAuthentication -enableglobal
+if(-not($?)){break}}}
+if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try
 	{
 		$spacer=""
@@ -718,12 +751,14 @@ function Add-ODItem
 		$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 		$rURI=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/content").Replace("/root/","/root:/")
 		return $webRequest=Invoke-WebRequest -Method PUT -InFile $LocalFile -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "multipart/form-data"  -UseBasicParsing -ErrorAction SilentlyContinue
+		$errorcode=$?
 	}
 	catch
 	{
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		return -1
 	}	
+}until($errorcode -or $doCount -ne 1)
 }
 function Add-ODItemLarge {
 	<#
@@ -750,7 +785,7 @@ function Add-ODItemLarge {
 	#>
 	
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
 		[string]$Path="/",
@@ -759,8 +794,18 @@ function Add-ODItemLarge {
 		[Parameter(Mandatory=$True)]
 		[string]$LocalFile=""
 	)
-	
+
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
+do{
+$doCount++
+if($doCount -ne 1){
+if ($Authentication -ne $null ) {
+$null=Get-ODAuthentication -ClientId $Authentication.ClientId -enableglobal
+if(-not($?)){break}
+}
+else{$null=Get-ODAuthentication -enableglobal
+if(-not($?)){break}}}
+if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	Try	{
 		# Begin to construct the real (full) URI
 		$spacer=""
@@ -772,6 +817,7 @@ function Add-ODItemLarge {
 		
 		# Initialize upload session
 		$webRequest=Invoke-WebRequest -Method PUT -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -UseBasicParsing -ErrorAction SilentlyContinue
+		$errorcode=$?
 
 		# Parse the response JSON (into a holder variable)
 		$convertResponse = ($webRequest.Content | ConvertFrom-Json)
@@ -851,6 +897,7 @@ function Add-ODItemLarge {
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		return -1
 	}	
+}until($errorcode -or $doCount -ne 1)
 }
 function Move-ODItem
 {
@@ -882,7 +929,7 @@ function Move-ODItem
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
 		[string]$Path="",
