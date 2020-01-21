@@ -68,8 +68,8 @@ function Get-ODAuthentication
 	} else
 	{
 		write-debug("Authentication mode: " +$Type)
-		$ErrorActionPreference="SilentlyContinue"
-		if([Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") ){$Verify}
+		[Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | out-null
+		$Verify= -not($?)
 		[Reflection.Assembly]::LoadWithPartialName("System.Drawing") | out-null
 		[Reflection.Assembly]::LoadWithPartialName("System.Web") | out-null
 		if ($Logout)
@@ -110,7 +110,7 @@ function Get-ODAuthentication
 		$web.Add_DocumentCompleted($DocComplete)
 		$form.Controls.Add($web)
 		}
-		if ($DontShowLoginScreen)
+		if ($DontShowLoginScreen -or $Verify)
 		{
 			write-debug("Logon screen suppressed by flag -DontShowLoginScreen")
 			$form.Opacity = 0.0;
