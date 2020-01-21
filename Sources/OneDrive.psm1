@@ -984,3 +984,141 @@ function Move-ODItem
 		}
 	}
 }
+function get-odsharelinkdownload
+	<#
+	.DESCRIPTION
+	Download a shared file
+	.PARAMETER URL
+	onedrive Share links
+	.PARAMETER path
+	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
+	.EXAMPLE
+    Get-ODDrives -URL https://1drv.ms/f/s!AtftJLuuzIqngqg598UpNi1x5YJ8bQ
+	Download a file
+	Get-ODDrives -URL xxx -path \d\d\
+	.NOTES
+	Avoid downloading large files
+	The application for OneDrive 4 Business needs "Read items in all site collections" on application level (API: Office 365 SharePoint Online)
+    Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
+	#>
+        {PAram(
+        [Parameter(Mandatory=$true,Position=0)]
+        [string]$uri,
+        [Parameter(Mandatory=$true,Position=1)]
+        [string]$path) 
+        if(-not(Test-Path $path)){break;write-host 'error path'}
+        if($path -match '[^/]$'){
+        $path=  (resolve-path -path $path).path+"/"}
+$ProgressPreference=    "SilentlyContinue"
+function Runspace0{
+param($ScriptBlock)
+$throttleLimit = 8
+$SessionState = [system.management.automation.runspaces.initialsessionstate]::CreateDefault()
+$Pool = [runspacefactory]::CreateRunspacePool(1, $throttleLimit, $SessionState, $Host)
+$Pool.Open()
+if ($ScriptBlock -is [string]){[array]$ScriptBlock=$ScriptBlock}
+$threads = @()
+$handles = for ($x = 0; $x -lt $ScriptBlock.length; $x++) {
+$fg=$ScriptBlock[$x]
+$scriptblock1=@"
+param(`$id)
+`$ErrorActionPreference='SilentlyContinue';
+`$WarningPreference='SilentlyContinue';
+`$ProgressPreference='SilentlyContinue';
+`$code=($fg)
+[PScustomobject]@{id=`$id;code=`$code}
+"@
+    $powershell = [powershell]::Create().AddScript($scriptblock1).AddArgument($x)
+    $powershell.RunspacePool = $Pool
+    $powershell.BeginInvoke()
+    $threads += $powershell}
+if ($handles -is [string]){[array]$handles=$handles}
+$ss=@()
+do {
+$done = $true
+# ($handles -ne $null).length
+for ($x=0;$X -lt $handles.length;$x++){
+$bi=$handles[$x].IsCompleted -like 'true'
+if ($bi){
+$ss=$ss += $threads[$x].EndInvoke($handles[$x])
+$threads[$x].Dispose()
+$handles[$x]=$null
+$threads[$x]=$null}}
+if ($handles.IsCompleted -ne $null){$done = $false}
+if (-not $done) { Start-Sleep -Milliseconds 900 }
+} until ($done)
+($ss |sort-object -Property id).code}
+function Folder-downloads {
+PAram([string]$URL,[string]$path='./')
+[array]$URL=$URL
+$path=(resolve-path -path $path).path
+$data=@()
+[array]$path1=$path
+$yuan='https://storage.live.com/items/'
+$folderID=@()
+do {
+if ($folderID[0] -ne $null -and $folderID[0] -ne $replace){
+[string]$replace=$folderID[0]
+$url=@()
+[array]$folder=$path1|select-object -Skip $folder.length
+$path1=@()
+for ($i=0;$i -lt $folder.length;$i++) {
+for ($x=0;$X -lt $folderName.length;$x++) {
+$path1+=$folder[$i]+$folderName[$x]+'/'
+$itempath=$folder[$i]+$folderName[$x]+"/"
+$null=New-Item -path "$itempath" -itemtype Directory -force
+#$folder[$i] -Name $folderName[$x]}}
+$folderID|%{$url+="$yuan$_$key"}
+Remove-variable folderName,folderID  -force}
+for ($x=0;$x -lt $URL.length;$x++){
+$xml=irm $URL[$x]
+$dd= [System.Text.Encoding]::UTF8.GetString([System.Text.Encoding]::GetEncoding(28591).GetBytes($xml))
+$key='?'+ ($URL[$x] |select-string -pattern 'authkey.*$').matches.value
+$dd=$([XML]$($dd  -replace '^[^<]+')).Folder.Items
+[array]$ResourceID=$dd.Document.ResourceID
+[array]$RelationshipName=$dd.Document.RelationshipName
+for ($i=0;$I -lt $ResourceID.length;$i++){
+$data+=[PScustomobject]@{
+ResourceID=$ResourceID[$i]
+RelationshipName=$RelationshipName[$i]
+path= $path1[$x]+$RelationshipName[$i]
+url=($yuan+$ResourceID[$i]+$key)}}
+[array]$folderID=$dd.folder.ResourceID
+[array]$folderName=$dd.folder.RelationshipName
+#if ($folderID -eq $null){break}}
+} until ($folderID -eq $null)
+$script=@()
+For ( $x=0; $x -lt $data.length;$x++){
+$path=$data.path[$x]
+$URL=$data.url[$x]
+$script+="iwr '$URL' -o '$path'"}
+if ($script -is [array] -and $script.length -gt 5){
+runspace0 $script
+}elseif($script -is [string]){iex $script}else{
+for ($x=0;$x -lt $script.length;$x++){
+iex $script[$x]}}
+write-host "文件数量："$ResourceID.count -ForegroundColor Blue|out-host
+$data}
+
+if ($uri -notmatch 'onedrive|skydrive|storage'){
+        $link=iwr  $uri -MaximumRedirection 0 -SkipHttpErrorCheck -ErrorAction Ignore
+        $link=$link.headers.location 
+}else{$link=$uri}
+if ($link -match 'ithint\=folder'){
+        $link= $link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)\?resid\=(.*?\d)(\&a.*)$','$1storage$2items/$3?$4'
+        [PScustomobject]@{链接地址=$link}|format-table -wrap
+        Folder-downloads -URL $link -path $path
+}else{
+	#$link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)(.*)$','$1skydrive$2download$3'|out-host
+	#$link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)\?resid\=(.*?\d)(\&a.*)$','$1storage$2items/$3?$4'|out-host
+	$link= $link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)(.*)$','$1skydrive$2download$3'
+	#$link=iwr  $uri -MaximumRedirection 0 -SkipHttpErrorCheck -ErrorAction Ignore
+	[PScustomobject]@{链接地址=$link}|format-table -wrap
+	$data=iwr "$link"
+	$replace=$data.headers.'Content-Disposition' -replace '^.*?(?=[^ ''"]+$)'
+	$name=[System.Web.HttpUtility]::UrlDecode($replace)
+	set-content -value $data -path "$path$name"
+	[PScustomobject]@{
+	name=$name
+	path=$path
+	URL=$link}}}
