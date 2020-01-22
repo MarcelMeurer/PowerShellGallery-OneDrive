@@ -1,3 +1,26 @@
+function jwt-decode {
+PAram([Parameter(Mandatory=$true,ValueFromPipeline=$true)][string]$data)
+if (-not($data)){Write-Error "没有输入值,例如：JWTxxxxxxxx.....";break;}
+[array]$data=$data -split '\.'
+function frombase64 {
+param([Parameter(Position = 0, ValueFromPipeline  = $True)]
+[string]$a)
+$c=$a.Length
+if((4 -lt $c) -and(0 -ne $c%4)){$b=4-$c%4}elseif($c -lt 4){$b=4-$c}else{$b=0}
+[System.Text.Encoding]::Utf8.GetString([System.Convert]::FromBase64String($a+("="*$b)))
+}
+$base=@()
+for($i=0;$I -lt ($data.length -1);$i++){
+frombase64 $data[$i]|convertfrom-json
+}
+}
+
+function timestamp-to-date {
+PAram([int64]$data)
+if (-not($data)){Write-Error "没有输入值,例如 :15868847";break;}
+(Get-Date 01.01.1970)+([System.TimeSpan]::fromseconds($data))
+}
+
 function Get-ODAuthentication
 {
 	<#
@@ -171,6 +194,16 @@ function Get-ODAuthentication
 	if($enableglobal){
 	$Global:Authentication=$Authentication
 	}
+<#
+$URL=$Key -replace '[^#]+#' -split '&' -replace '^[^=]+$' -split '='
+$format=@()
+for(($i=0),($j=1);$I -lt $URL.length;($i+=2),($j+=2)){
+$format+=@{$URL[$i]=$URL[$j]}}
+$access_token=jwt-decode $format.access_token
+$global:authen=jwt-decode $format.authentication_token
+#timestamp-to-date $access_token.exp[1]
+$global:authentication_token=timestamp-to-date $authen.exp[1]
+#>
 	return $Authentication 
 }
 function Get-ODRootUri 
@@ -231,10 +264,17 @@ function Get-ODWebContent
 	$string=@{ enableglobal=$true}
 	if($Authentication -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
 	if($Authentication.ResourceId -and -not($ResourceId)){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId){$string=@{ResourceId=$ResourceId}}
+	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
+	[array]$Global:Authentication+=[PScustomobject]@{access_token=$AccessToken}
+	}
+	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
+	[array]$Global:Authentication+=[PScustomobject]@{ResourceId=$ResourceId}
+	}
 do{
 $doCount++
 if($doCount -ne 1){
 $null=Get-ODAuthentication @string
+$AccessToken=$null
 if(-not($?)){break}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try {
@@ -244,8 +284,7 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	{
 		write-error("Cannot access the api. Webrequest return code is: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 	}
-		$errorcode=$?
-}until($errorcode -or $doCount -ne 1)
+}until($? -or $doCount -ne 1)
 if (-not($errorcode)){break}
 	switch ($webRequest.StatusCode) 
     { 
@@ -291,6 +330,7 @@ function Get-ODDrives
 		[string]$AccessToken,
 		[String]$ResourceId=""
 	)
+	$ProgressPreference="SilentlyContinue"
 	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method GET -rURI "/drives" 
 	return $ResponseObject.Value
 }
@@ -316,6 +356,7 @@ function Get-ODSharedItems
 		[string]$AccessToken,
 		[String]$ResourceId=""
 	)
+	$ProgressPreference="SilentlyContinue"
 	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method GET -rURI "/drive/oneDrive.sharedWithMe"
 	return $ResponseObject.Value
 }
@@ -420,6 +461,7 @@ function Get-ODItemProperty
 		[string]$SelectProperties="name,size,lastModifiedDateTime,id",
 		[string]$DriveId=""
 	)
+	$ProgressPreference="SilentlyContinue"
 	return Get-ODChildItems -AccessToken $AccessToken -ResourceId $ResourceId -Path $Path -ElementId $ElementId -SelectProperties $SelectProperties -DriveId $DriveId -ItemPropertyMode
 }
 
@@ -455,6 +497,7 @@ function Get-ODChildItems
 		[string]$AccessToken,
 		[String]$ResourceId="",
 		[string]$Path="/",
+		[Parameter(HelpMessage="input folder id")]
 		[string]$ElementId="",
 		[string]$SelectProperties="name,size,lastModifiedDateTime,id",
 		[string]$DriveId="",
@@ -465,7 +508,7 @@ function Get-ODChildItems
 		[parameter(DontShow)]
         [switch]$Loop=$false
 	)
-
+	$ProgressPreference="SilentlyContinue"
 	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 	if ($Path.Contains('$skiptoken=') -or $Loop)
 	{	
@@ -548,6 +591,12 @@ function Search-ODItems
 	Specifies the OneDrive drive id. If not set, the default drive is used.
 	.EXAMPLE
     Search-ODItems -AccessToken $AuthToken -Path "/My pictures" -SearchText "FolderA" 
+    Search-ODItems <SearchText>
+    Search-ODItems <SearchText> <folder id>
+    Search-ODItems <SearchText> <folder id> <SelectProperties(name,size)>
+    Search-ODItems f -selectproperties 'name,id'
+    Search-ODItems 'mm' -path '/powershell'
+    Search-ODItems 'mm' -path '/powershell' -AccessToken $AuthToken
 	Searches for items in a sub folder recursively. Take a look at OneDrives API documentation to see how search (preview) works (file and folder names, in files, …)
 	.NOTES
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
@@ -556,14 +605,20 @@ function Search-ODItems
 		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
-		[Parameter(Mandatory=$true,Position=0)]
+		[Parameter(Mandatory=$false,Position=0)]
 		[string]$SearchText,
+		[Parameter(Mandatory=$false,Position=3)]
 		[string]$Path="/",
+		[Parameter(Mandatory=$false,Position=1)]
 		[string]$ElementId="",
+		[Parameter(Mandatory=$false,Position=2)]
 		[string]$SelectProperties="name,size,lastModifiedDateTime,id",
+		[Parameter(Mandatory=$false)]
 		[string]$DriveId=""
 	)
-	return Get-ODChildItems -AccessToken $AccessToken -ResourceId $ResourceId -Path $Path -ElementId $ElementId -SelectProperties $SelectProperties -DriveId $DriveId -SearchText $SearchText	
+	$ProgressPreference="SilentlyContinue"
+	if(!($SearchText)-and!($ElementId)){"请输入一个值：SearchText or ElementId";break}
+	return Get-ODChildItems -AccessToken $AccessToken -ResourceId $ResourceId -Path $Path -ElementId $ElementId -SelectProperties $SelectProperties -DriveId $DriveId -SearchText $SearchText
 }
 
 function New-ODFolder
@@ -595,10 +650,13 @@ function New-ODFolder
 		[String]$ResourceId="",
 		[Parameter(Mandatory=$True)]
 		[string]$FolderName,
+		[Parameter(Mandatory=$true,ParameterSetName="path")]
 		[string]$Path="/",
+		[Parameter(Mandatory=$true,ParameterSetName="id")]
 		[string]$ElementId="",
 		[string]$DriveId=""
 	)
+	$ProgressPreference="SilentlyContinue"
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	$rURI=$rURI+"/children"
 	return Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method POST -rURI $rURI -Body ('{"name": "'+$FolderName+'","folder": { },"@name.conflictBehavior": "fail"}')
@@ -629,10 +687,13 @@ function Remove-ODItem
 		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
+		[Parameter(Mandatory=$true,ParameterSetName="path")]
 		[string]$Path="",
+		[Parameter(Mandatory=$true,ParameterSetName="id")]
 		[string]$ElementId="",
 		[string]$DriveId=""
 	)
+	$ProgressPreference="SilentlyContinue"
 	if (($ElementId+$Path) -eq "") 
 	{
 		write-error("Path nor ElementId is set")
@@ -673,7 +734,9 @@ function Get-ODItem
 		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
+		[Parameter(Mandatory=$true,ParameterSetName="path")]
 		[string]$Path="",
+		[Parameter(Mandatory=$true,ParameterSetName="id")]
 		[string]$ElementId="",
 		[string]$DriveId="",
 		[string]$LocalPath="",
@@ -741,10 +804,13 @@ function Add-ODItem
 		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
+		[Parameter(Mandatory=$true,ParameterSetName="path")]
 		[string]$Path="/",
+		[Parameter(Mandatory=$true,ParameterSetName="id")]
 		[string]$ElementId="",
 		[string]$DriveId="",
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$true,ParameterSetName="path")]
+		[Parameter(Mandatory=$true,ParameterSetName="id")]
 		[string]$LocalFile=""
 	)
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
@@ -752,10 +818,17 @@ function Add-ODItem
 	$string=@{ enableglobal=$true}
 	if($Authentication -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
 	if($Authentication.ResourceId -and -not($ResourceId)){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId){$string=@{ResourceId=$ResourceId}}
+	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
+	[array]$Global:Authentication+=[PScustomobject]@{access_token=$AccessToken}
+	}
+	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
+	[array]$Global:Authentication+=[PScustomobject]@{ResourceId=$ResourceId}
+	}
 do{
 $doCount++
 if($doCount -ne 1){
 $null=Get-ODAuthentication @string
+$AccessToken=$null
 if(-not($?)){break}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try
@@ -771,8 +844,7 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		#return -1
 	}	
-	$errorcode=$?
-}until($errorcode -or $doCount -ne 1)
+}until($? -or $doCount -ne 1)
 }
 function Add-ODItemLarge {
 	<#
@@ -802,10 +874,13 @@ function Add-ODItemLarge {
 		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
+		[Parameter(Mandatory=$true,ParameterSetName="path")]
 		[string]$Path="/",
+		[Parameter(Mandatory=$true,ParameterSetName="id")]
 		[string]$ElementId="",
 		[string]$DriveId="",
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$true,ParameterSetName="path")]
+		[Parameter(Mandatory=$true,ParameterSetName="id")]
 		[string]$LocalFile=""
 	)
 
@@ -814,10 +889,17 @@ function Add-ODItemLarge {
 	$string=@{ enableglobal=$true}
 	if($Authentication -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
 	if($Authentication.ResourceId -and -not($ResourceId)){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId){$string=@{ResourceId=$ResourceId}}
+	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
+	[array]$Global:Authentication+=[PScustomobject]@{access_token=$AccessToken}
+	}
+	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
+	[array]$Global:Authentication+=[PScustomobject]@{ResourceId=$ResourceId}
+	}
 do{
 $doCount++
 if($doCount -ne 1){
 $null=Get-ODAuthentication @string
+$AccessToken=$null
 if(-not($?)){break}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	Try	{
@@ -910,8 +992,7 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		#return -1
 	}
-	$errorcode=$?
-}until($errorcode -or $doCount -ne 1)
+}until($? -or $doCount -ne 1)
 }
 function Move-ODItem
 {
@@ -946,12 +1027,15 @@ function Move-ODItem
 		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
+		[Parameter(Mandatory=$true,ParameterSetName="path")]
 		[string]$Path="",
+		[Parameter(Mandatory=$true,ParameterSetName="id")]
 		[string]$ElementId="",
 		[string]$DriveId="",
 		[string]$TargetPath="",
 		[string]$NewName=""
 	)
+	$ProgressPreference="SilentlyContinue"
 	if (($ElementId+$Path) -eq "") 
 	{
 		write-error("Path nor ElementId is set")
@@ -991,7 +1075,7 @@ function get-odsharelinkdownload
 	.PARAMETER URL
 	onedrive Share links
 	.PARAMETER path
-	Mandatory for OneDrive 4 Business access. Is the ressource URI: "https://<tenant>-my.sharepoint.com/". Example: "https://sepagogmbh-my.sharepoint.com/"
+	
 	.EXAMPLE
     Get-ODDrives -URL https://1drv.ms/f/s!AtftJLuuzIqngqg598UpNi1x5YJ8bQ
 	Download a file
@@ -1010,6 +1094,7 @@ function get-odsharelinkdownload
         if($path -match '[^/]$'){
         $path=  (resolve-path -path $path).path+"/"}
 $ProgressPreference=    "SilentlyContinue"
+
 function Runspace0{
 param($ScriptBlock)
 $throttleLimit = 8
@@ -1048,6 +1133,7 @@ if ($handles.IsCompleted -ne $null){$done = $false}
 if (-not $done) { Start-Sleep -Milliseconds 900 }
 } until ($done)
 ($ss |sort-object -Property id).code}
+
 function Folder-downloads {
 PAram([string]$URL,[string]$path='./')
 [array]$URL=$URL
