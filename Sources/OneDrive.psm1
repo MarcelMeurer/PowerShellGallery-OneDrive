@@ -7,19 +7,11 @@ param([Parameter(Position = 0, ValueFromPipeline  = $True)]
 [string]$a)
 $c=$a.Length
 if((4 -lt $c) -and(0 -ne $c%4)){$b=4-$c%4}elseif($c -lt 4){$b=4-$c}else{$b=0}
-[System.Text.Encoding]::Utf8.GetString([System.Convert]::FromBase64String($a+("="*$b)))
-}
+[System.Text.Encoding]::Utf8.GetString([System.Convert]::FromBase64String($a+("="*$b)))}
 $base=@()
 for($i=0;$I -lt ($data.length -1);$i++){
-frombase64 $data[$i]|convertfrom-json
-}
-}
+frombase64 $data[$i]|convertfrom-json}}
 
-function timestamp-to-date {
-PAram([int64]$data)
-if (-not($data)){Write-Error "没有输入值,例如 :15868847";break;}
-(Get-Date 01.01.1970)+([System.TimeSpan]::fromseconds($data))
-}
 
 function Get-ODAuthentication
 {
@@ -201,8 +193,8 @@ for(($i=0),($j=1);$I -lt $URL.length;($i+=2),($j+=2)){
 $format+=@{$URL[$i]=$URL[$j]}}
 $access_token=jwt-decode $format.access_token
 $global:authen=jwt-decode $format.authentication_token
-#timestamp-to-date $access_token.exp[1]
-$global:authentication_token=timestamp-to-date $authen.exp[1]
+$global:authentication_token=
+(Get-Date 01.01.1970)+([System.TimeSpan]::fromseconds($authen.exp[1])) 
 #>
 	return $Authentication 
 }
@@ -262,30 +254,32 @@ function Get-ODWebContent
 	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 	$string=@()
 	$string=@{ enableglobal=$true}
-	if($Authentication -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
-	if($Authentication.ResourceId -and -not($ResourceId)){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId){$string=@{ResourceId=$ResourceId}}
+	if($Authentication.ClientId -and ($ResourceId -cmatch '.{10,}')){$string=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ResourceId -and ($ResourceId -cmatch '.{10,}')){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId -cmatch '.{10,}'){$string=@{ResourceId=$ResourceId}}
 	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
 	[array]$Global:Authentication+=[PScustomobject]@{access_token=$AccessToken}
 	}
 	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
-	[array]$Global:Authentication+=[PScustomobject]@{ResourceId=$ResourceId}
+	$Global:Authentication.ResourceId=$ResourceId
 	}
+$code=@('Access token is empty.','Authentication failed','Unauthorized')
 do{
 $doCount++
 if($doCount -ne 1){
 $null=Get-ODAuthentication @string
-$AccessToken=$null
-if(-not($?)){break}}
+if(-not($?)){break}
+if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try {
-		$webRequest=Invoke-WebRequest -Method $Method -Uri ($ODRootURI+$rURI) -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -Body $xBody -UseBasicParsing -ErrorAction SilentlyContinue
+		$webRequest=Invoke-WebRequest -Method $Method -Uri ($ODRootURI+$rURI) -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -Body $xBody -UseBasicParsing
 	} 
 	catch
 	{
-		write-error("Cannot access the api. Webrequest return code is: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
+		#write-error("Cannot access the api. Webrequest return code is: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
+		$mess=$_.Exception
+		$err=($_.ErrorDetails.message|ConvertFrom-Json).error
 	}
-}until($? -or $doCount -ne 1)
-if (-not($errorcode)){break}
+}until($code -notcontains $mess.Response.StatusCode -or $code -notcontains $err.message -or $doCount -ne 1)
 	switch ($webRequest.StatusCode) 
     { 
         200 
@@ -816,7 +810,7 @@ function Add-ODItem
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	$string=@()
 	$string=@{ enableglobal=$true}
-	if($Authentication -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ClientId -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
 	if($Authentication.ResourceId -and -not($ResourceId)){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId){$string=@{ResourceId=$ResourceId}}
 	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
 	[array]$Global:Authentication+=[PScustomobject]@{access_token=$AccessToken}
@@ -824,12 +818,13 @@ function Add-ODItem
 	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
 	[array]$Global:Authentication+=[PScustomobject]@{ResourceId=$ResourceId}
 	}
+$code=@('Access token is empty.','Authentication failed','Unauthorized')
 do{
 $doCount++
 if($doCount -ne 1){
 $null=Get-ODAuthentication @string
-$AccessToken=$null
-if(-not($?)){break}}
+if(-not($?)){break}
+if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try
 	{
@@ -843,8 +838,9 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	{
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		#return -1
-	}	
-}until($? -or $doCount -ne 1)
+		$mess=$_.Exception.Response.StatusCode
+	}
+}until($code -notcontains $mess -or $doCount -ne 1)
 }
 function Add-ODItemLarge {
 	<#
@@ -887,7 +883,7 @@ function Add-ODItemLarge {
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	$string=@()
 	$string=@{ enableglobal=$true}
-	if($Authentication -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ClientId -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
 	if($Authentication.ResourceId -and -not($ResourceId)){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId){$string=@{ResourceId=$ResourceId}}
 	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
 	[array]$Global:Authentication+=[PScustomobject]@{access_token=$AccessToken}
@@ -895,12 +891,13 @@ function Add-ODItemLarge {
 	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
 	[array]$Global:Authentication+=[PScustomobject]@{ResourceId=$ResourceId}
 	}
+$code=@('Access token is empty.','Authentication failed','Unauthorized')
 do{
 $doCount++
 if($doCount -ne 1){
 $null=Get-ODAuthentication @string
-$AccessToken=$null
-if(-not($?)){break}}
+if(-not($?)){break}
+if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	Try	{
 		# Begin to construct the real (full) URI
@@ -991,8 +988,9 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	Catch {
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		#return -1
+		$mess=$_.Exception.Response.StatusCode
 	}
-}until($? -or $doCount -ne 1)
+}until($code -notcontains $mess -or $doCount -ne 1)
 }
 function Move-ODItem
 {
