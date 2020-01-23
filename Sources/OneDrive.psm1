@@ -267,6 +267,7 @@ do{
 if($mess){
 $null=Get-ODAuthentication @string
 if(-not($?)){break}
+remove-variable mess -force
 if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try {
@@ -822,6 +823,7 @@ do{
 if($mess){
 $null=Get-ODAuthentication @string
 if(-not($?)){break}
+remove-variable mess -force
 if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try
@@ -896,6 +898,7 @@ do{
 if($mess){
 $null=Get-ODAuthentication @string
 if(-not($?)){break}
+remove-variable mess -force
 if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	Try	{
