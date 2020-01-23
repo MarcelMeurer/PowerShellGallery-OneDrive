@@ -136,7 +136,7 @@ function Get-ODAuthentication
 		$regex= 'access_token=[^&]+'
 		do {
 		$key=read-host -prompt 'URL'
-		if (-not($key -match $regex)){write-host 'ERROR' -ForegroundColor DarkCyan|out-host}
+		if (-not($key -match $regex)){write-host '`rERROR' -ForegroundColor DarkCyan|out-host}
 		}until($key -match $regex)
 		$Global:ODAccessToken=($key|select-string -pattern '(?<=token=)[^&]+' ).matches.value
 		$Global:odtokentime=get-date
@@ -262,10 +262,9 @@ function Get-ODWebContent
 	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
 	$Global:Authentication.ResourceId=$ResourceId
 	}
-$code=@('Access token is empty.','Authentication failed','Unauthorized')
+$code=@('WWW-Authenticate')
 do{
-$doCount++
-if($doCount -ne 1){
+if($mess){
 $null=Get-ODAuthentication @string
 if(-not($?)){break}
 if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
@@ -275,11 +274,11 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	} 
 	catch
 	{
-		#write-error("Cannot access the api. Webrequest return code is: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
-		$mess=$_.Exception
-		$err=($_.ErrorDetails.message|ConvertFrom-Json).error
+		$mess=$_.Exception.response.Headers|?{$_.key -like 'WWW-Authenticate'}
+		if($mess){$mess.value -replace '(^[^=]+?)(=)','"$1":' `
+		-replace ', *([^ =]+?)(=)',',"$1":' -replace '^','{' -replace '$','}'|ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
 	}
-}until($code -notcontains $mess.Response.StatusCode -or $code -notcontains $err.message -or $doCount -ne 1)
+}until($code -notcontains $mess.key)
 	switch ($webRequest.StatusCode) 
     { 
         200 
@@ -299,7 +298,7 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 			$responseObject = "0"
 			return $responseObject
 		} 
-        default {write-warning("Cannot access the api. Webrequest return code is: "+$webRequest.StatusCode+"`n"+$webRequest.StatusDescription)}
+        #default {write-warning("Cannot access the api. Webrequest return code is: "+$webRequest.StatusCode+"`n"+$webRequest.StatusDescription)}
     }
 }
 
@@ -818,10 +817,9 @@ function Add-ODItem
 	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
 	[array]$Global:Authentication+=[PScustomobject]@{ResourceId=$ResourceId}
 	}
-$code=@('Access token is empty.','Authentication failed','Unauthorized')
+$code=@('WWW-Authenticate')
 do{
-$doCount++
-if($doCount -ne 1){
+if($mess){
 $null=Get-ODAuthentication @string
 if(-not($?)){break}
 if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
@@ -838,9 +836,11 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	{
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		#return -1
-		$mess=$_.Exception.Response.StatusCode
+		$mess=$_.Exception.response.Headers|?{$_.key -like 'WWW-Authenticate'}
+		if($mess){$mess.value -replace '(^[^=]+?)(=)','"$1":' `
+		-replace ', *([^ =]+?)(=)',',"$1":' -replace '^','{' -replace '$','}'|ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
 	}
-}until($code -notcontains $mess -or $doCount -ne 1)
+}until($code -notcontains $mess.key)
 }
 function Add-ODItemLarge {
 	<#
@@ -891,10 +891,9 @@ function Add-ODItemLarge {
 	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
 	[array]$Global:Authentication+=[PScustomobject]@{ResourceId=$ResourceId}
 	}
-$code=@('Access token is empty.','Authentication failed','Unauthorized')
+$code=@('WWW-Authenticate')
 do{
-$doCount++
-if($doCount -ne 1){
+if($mess){
 $null=Get-ODAuthentication @string
 if(-not($?)){break}
 if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
@@ -988,9 +987,11 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	Catch {
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		#return -1
-		$mess=$_.Exception.Response.StatusCode
+		$mess=$_.Exception.response.Headers|?{$_.key -like 'WWW-Authenticate'}
+		if($mess){$mess.value -replace '(^[^=]+?)(=)','"$1":' `
+		-replace ', *([^ =]+?)(=)',',"$1":' -replace '^','{' -replace '$','}'|ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
 	}
-}until($code -notcontains $mess -or $doCount -ne 1)
+}until($code -notcontains $mess.key)
 }
 function Move-ODItem
 {
