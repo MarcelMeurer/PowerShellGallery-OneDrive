@@ -57,6 +57,7 @@ function Get-ODAuthentication
 		[switch]$LogOut,
 		[switch]$enableglobal
 	)
+	if($ClientId -cnotmatch '^([a-f0-9]{3,}-){3,}[a-f0-9]{3,}$'){write-error 'ClientId error';break}
 	$optResourceId=""
 	$optOauthVersion="/v2.0"
 	if ($ResourceId -ne "")
@@ -252,22 +253,28 @@ function Get-ODWebContent
 	}
 	
 	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
-	$string=@()
+	function splash{$string=@()
 	$string=@{ enableglobal=$true}
-	if($Authentication.ClientId -and ($ResourceId -cmatch '.{10,}')){$string=@{ClientId = $Authentication.ClientId}} 
-	if($Authentication.ResourceId -and ($ResourceId -cmatch '.{10,}')){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId -cmatch '.{10,}'){$string=@{ResourceId=$ResourceId}}
+	if($Authentication.ClientId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ResourceId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}
+	$string}
+	$string= splash
+	if (!($Authentication)){$Global:Authentication = New-Object PSObject}
 	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
-	[array]$Global:Authentication+=[PScustomobject]@{access_token=$AccessToken}
-	}
+	switch ($Authentication.ResourceId -eq $null) {
+	true {$Authentication | add-member Noteproperty 'access_token' ($AccessToken)}
+	false {$Authentication.access_token=$AccessToken}}}
 	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
-	$Global:Authentication.ResourceId=$ResourceId
-	}
-$code=@('WWW-Authenticate')
+	switch ($Authentication.ResourceId -eq $null) {
+	false {$Authentication.ResourceId=$ResourceId}
+	true {$Authentication | add-member Noteproperty 'ResourceId' ($ResourceId)}}}
+	$code=@('WWW-Authenticate')
 do{
 if($mess){
 $null=Get-ODAuthentication @string
-if(-not($?)){break}
+if(!($?)){break}
 remove-variable mess -force
+$string=splash
 if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try {
@@ -276,8 +283,9 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	catch
 	{
 		$mess=$_.Exception.response.Headers|?{$_.key -like 'WWW-Authenticate'}
-		if($mess){$mess.value -replace '(^[^=]+?)(=)','"$1":' `
-		-replace ', *([^ =]+?)(=)',',"$1":' -replace '^','{' -replace '$','}'|ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
+		if($mess){$mess.value -replace '(^[^=]+?)=','"$1":' `
+		-replace ', *([^ =]+?)=',',"$1":' -replace '^','{' -replace '$','}'|
+		ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
 	}
 }until($code -notcontains $mess.key)
 	switch ($webRequest.StatusCode) 
@@ -808,22 +816,28 @@ function Add-ODItem
 		[string]$LocalFile=""
 	)
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
-	$string=@()
+	function splash{$string=@()
 	$string=@{ enableglobal=$true}
-	if($Authentication.ClientId -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
-	if($Authentication.ResourceId -and -not($ResourceId)){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId){$string=@{ResourceId=$ResourceId}}
+	if($Authentication.ClientId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ResourceId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}
+	$string}
+	$string= splash
+	if (!($Authentication)){$Global:Authentication = New-Object PSObject}
 	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
-	[array]$Global:Authentication+=[PScustomobject]@{access_token=$AccessToken}
-	}
+	switch ($Authentication.ResourceId -eq $null) {
+	true {$Authentication | add-member Noteproperty 'access_token' ($AccessToken)}
+	false {$Authentication.access_token=$AccessToken}}}
 	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
-	[array]$Global:Authentication+=[PScustomobject]@{ResourceId=$ResourceId}
-	}
-$code=@('WWW-Authenticate')
+	switch ($Authentication.ResourceId -eq $null) {
+	false {$Authentication.ResourceId=$ResourceId}
+	true {$Authentication | add-member Noteproperty 'ResourceId' ($ResourceId)}}}
+	$code=@('WWW-Authenticate')
 do{
 if($mess){
 $null=Get-ODAuthentication @string
-if(-not($?)){break}
+if(!($?)){break}
 remove-variable mess -force
+$string=splash
 if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	try
@@ -839,8 +853,9 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		#return -1
 		$mess=$_.Exception.response.Headers|?{$_.key -like 'WWW-Authenticate'}
-		if($mess){$mess.value -replace '(^[^=]+?)(=)','"$1":' `
-		-replace ', *([^ =]+?)(=)',',"$1":' -replace '^','{' -replace '$','}'|ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
+		if($mess){$mess.value -replace '(^[^=]+?)=','"$1":' `
+		-replace ', *([^ =]+?)=',',"$1":' -replace '^','{' -replace '$','}'|
+		ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
 	}
 }until($code -notcontains $mess.key)
 }
@@ -883,22 +898,28 @@ function Add-ODItemLarge {
 	)
 
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
-	$string=@()
+	function splash{$string=@()
 	$string=@{ enableglobal=$true}
-	if($Authentication.ClientId -and -not($ResourceId)){$string=@{ClientId = $Authentication.ClientId}} 
-	if($Authentication.ResourceId -and -not($ResourceId)){$string=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId){$string=@{ResourceId=$ResourceId}}
+	if($Authentication.ClientId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ResourceId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}
+	$string}
+	$string= splash
+	if (!($Authentication)){$Global:Authentication = New-Object PSObject}
 	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
-	[array]$Global:Authentication+=[PScustomobject]@{access_token=$AccessToken}
-	}
+	switch ($Authentication.ResourceId -eq $null) {
+	true {$Authentication | add-member Noteproperty 'access_token' ($AccessToken)}
+	false {$Authentication.access_token=$AccessToken}}}
 	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
-	[array]$Global:Authentication+=[PScustomobject]@{ResourceId=$ResourceId}
-	}
-$code=@('WWW-Authenticate')
+	switch ($Authentication.ResourceId -eq $null) {
+	false {$Authentication.ResourceId=$ResourceId}
+	true {$Authentication | add-member Noteproperty 'ResourceId' ($ResourceId)}}}
+	$code=@('WWW-Authenticate')
 do{
 if($mess){
 $null=Get-ODAuthentication @string
-if(-not($?)){break}
+if(!($?)){break}
 remove-variable mess -force
+$string=splash
 if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
 if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 	Try	{
@@ -991,8 +1012,9 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		#return -1
 		$mess=$_.Exception.response.Headers|?{$_.key -like 'WWW-Authenticate'}
-		if($mess){$mess.value -replace '(^[^=]+?)(=)','"$1":' `
-		-replace ', *([^ =]+?)(=)',',"$1":' -replace '^','{' -replace '$','}'|ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
+		if($mess){$mess.value -replace '(^[^=]+?)=','"$1":' `
+		-replace ', *([^ =]+?)=',',"$1":' -replace '^','{' -replace '$','}'|
+		ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
 	}
 }until($code -notcontains $mess.key)
 }
