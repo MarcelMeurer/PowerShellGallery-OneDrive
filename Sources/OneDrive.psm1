@@ -57,7 +57,7 @@ function Get-ODAuthentication
 		[switch]$LogOut,
 		[switch]$enableglobal
 	)
-	if($ClientId -cnotmatch '^([a-f0-9]{3,}-){3,}[a-f0-9]{3,}$'){write-error 'ClientId error';break}
+	if($ClientId -cnotmatch '([a-f0-9]{4,}-?){4,}'){write-host 'ClientId error' -ForegroundColor red;break}
 	$optResourceId=""
 	$optOauthVersion="/v2.0"
 	if ($ResourceId -ne "")
@@ -78,7 +78,7 @@ function Get-ODAuthentication
 	{
 		write-debug("A refresh token is given. Try to refresh it in code mode.")
 		$body="client_id=$ClientId&redirect_URI=$RedirectURI&client_secret=$([uri]::EscapeDataString($AppKey))&refresh_token="+$RefreshToken+"&grant_type=refresh_token"
-		write-host $body
+		write-debug $body
 		$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2$optOauthVersion/token" -ContentType "application/x-www-form-URLencoded" -Body $Body -UseBasicParsing
 		$Authentication = $webRequest.Content |   ConvertFrom-Json
 	} else
@@ -87,6 +87,7 @@ function Get-ODAuthentication
 		$ErrorActionPreference="SilentlyContinue"
 		$null=[Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") 
 		$Verify= $?
+		$ErrorActionPreference="Continue"
 		[Reflection.Assembly]::LoadWithPartialName("System.Drawing") | out-null
 		[Reflection.Assembly]::LoadWithPartialName("System.Web") | out-null
 		if ($Logout)
@@ -134,10 +135,10 @@ function Get-ODAuthentication
 		$form.showdialog() | out-null
 		}else{
 		@("A refresh token is given. Try to refresh it in code mode.",$URIGetAccessToken)|out-host
-		$regex= 'access_token=[^&]+'
+		$regex= 'access_token=[^&]+|\?code=[^&]+'
 		do {
 		$key=read-host -prompt 'URL'
-		if (-not($key -match $regex)){write-host '`rERROR' -ForegroundColor DarkCyan|out-host}
+		if (-not($key -match $regex)){write-host "`rERROR" -ForegroundColor DarkCyan|out-host}
 		}until($key -match $regex)
 		$Global:ODAccessToken=($key|select-string -pattern '(?<=token=)[^&]+' ).matches.value
 		$Global:odtokentime=get-date
@@ -183,6 +184,9 @@ function Get-ODAuthentication
 	$Authentication | add-member Noteproperty "ClientId" ($ClientId)
 	if ($ResourceId){
 	$Authentication | add-member Noteproperty "ResourceId" ($ResourceId)
+	}
+	if ($appkey){
+	$Authentication | add-member Noteproperty "appkey" ($appkey)
 	}
 	if($enableglobal){
 	$Global:Authentication=$Authentication
@@ -255,8 +259,11 @@ function Get-ODWebContent
 	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 	function splash{$string=@()
 	$string=@{ enableglobal=$true}
-	if($Authentication.ClientId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ClientId = $Authentication.ClientId}} 
-	if($Authentication.ResourceId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}
+	if($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}else{
+	if($Authentication.ClientId){$string+=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ResourceId){$string+=@{ResourceId=$Authentication.ResourceId}}
+	if($Authentication.refresh_token){$string+=@{RefreshToken=$Authentication.refresh_token}}
+	if($Authentication.appkey){$string+=@{appkey=$Authentication.appkey}}}
 	$string}
 	$string= splash
 	if (!($Authentication)){$Global:Authentication = New-Object PSObject}
@@ -818,8 +825,11 @@ function Add-ODItem
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	function splash{$string=@()
 	$string=@{ enableglobal=$true}
-	if($Authentication.ClientId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ClientId = $Authentication.ClientId}} 
-	if($Authentication.ResourceId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}
+	if($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}else{
+	if($Authentication.ClientId){$string+=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ResourceId){$string+=@{ResourceId=$Authentication.ResourceId}}
+	if($Authentication.refresh_token){$string+=@{RefreshToken=$Authentication.refresh_token}}
+	if($Authentication.appkey){$string+=@{appkey=$Authentication.appkey}}}
 	$string}
 	$string= splash
 	if (!($Authentication)){$Global:Authentication = New-Object PSObject}
@@ -900,8 +910,11 @@ function Add-ODItemLarge {
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	function splash{$string=@()
 	$string=@{ enableglobal=$true}
-	if($Authentication.ClientId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ClientId = $Authentication.ClientId}} 
-	if($Authentication.ResourceId -and ($ResourceId -cmatch '.{10,}')){$string+=@{ResourceId=$Authentication.ResourceId}}elseif($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}
+	if($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}else{
+	if($Authentication.ClientId){$string+=@{ClientId = $Authentication.ClientId}} 
+	if($Authentication.ResourceId){$string+=@{ResourceId=$Authentication.ResourceId}}
+	if($Authentication.refresh_token){$string+=@{RefreshToken=$Authentication.refresh_token}}
+	if($Authentication.appkey){$string+=@{appkey=$Authentication.appkey}}}
 	$string}
 	$string= splash
 	if (!($Authentication)){$Global:Authentication = New-Object PSObject}
@@ -1097,14 +1110,16 @@ function get-odsharelinkdownload
 	.DESCRIPTION
 	Download a shared file
 	.PARAMETER URL
-	onedrive Share links
+	onedrive.live.com Share links
 	.PARAMETER path
 	
 	.EXAMPLE
-    Get-ODDrives -URL https://1drv.ms/f/s!AtftJLuuzIqngqg598UpNi1x5YJ8bQ
+    get-ODShareLinkDownload -URL https://1drv.ms/f/s!AtftJLuuzIqngqg598UpNi1x5YJ8bQ
 	Download a file
-	Get-ODDrives -URL xxx -path \d\d\
+	get-ODShareLinkDownload -URL xxx
+	get-ODShareLinkDownload -URL xxx -path c:\d\d\
 	.NOTES
+	
 	Avoid downloading large files
 	The application for OneDrive 4 Business needs "Read items in all site collections" on application level (API: Office 365 SharePoint Online)
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
@@ -1112,9 +1127,9 @@ function get-odsharelinkdownload
         {PAram(
         [Parameter(Mandatory=$true,Position=0)]
         [string]$uri,
-        [Parameter(Mandatory=$true,Position=1)]
-        [string]$path) 
-        if(-not(Test-Path $path)){break;write-host 'error path'}
+        [Parameter(Mandatory=$false,Position=1)]
+        [string]$path='./') 
+        if(-not(Test-Path $path)){write-host -ForegroundColor DarkCyan 'Tips：error path';break}
         if($path -match '[^/]$'){
         $path=  (resolve-path -path $path).path+"/"}
 $ProgressPreference=    "SilentlyContinue"
