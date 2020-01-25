@@ -389,6 +389,10 @@ function Format-ODPathorIdString
 		[string]$DriveId="",
 		[string]$ElementId=""
 	)
+	if($Path -cmatch'(%[A-F0-9]{2}){2}'){
+	if($Path -match ':'){$Path=$Path -replace '^[^:]+:'}
+	$Path=[System.Web.HttpUtility]::UrlDecode($Path)
+	}
 	if (!$ElementId -eq "")
 	{
 		# Use ElementId parameters
@@ -906,7 +910,7 @@ function Add-ODItemLarge {
 		[Parameter(Mandatory=$true,ParameterSetName="id")]
 		[string]$LocalFile=""
 	)
-
+	
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	function splash{$string=@()
 	$string=@{ enableglobal=$true}
@@ -1105,7 +1109,7 @@ function Move-ODItem
 		}
 	}
 }
-function get-odsharelinkdownload
+function get-ODShareLinkDownload
 	<#
 	.DESCRIPTION
 	Download a shared file
@@ -1119,7 +1123,6 @@ function get-odsharelinkdownload
 	get-ODShareLinkDownload -URL xxx
 	get-ODShareLinkDownload -URL xxx -path c:\d\d\
 	.NOTES
-	
 	Avoid downloading large files
 	The application for OneDrive 4 Business needs "Read items in all site collections" on application level (API: Office 365 SharePoint Online)
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
