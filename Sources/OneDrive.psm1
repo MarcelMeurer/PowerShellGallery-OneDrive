@@ -1,18 +1,3 @@
-function jwt-decode {
-PAram([Parameter(Mandatory=$true,ValueFromPipeline=$true)][string]$data)
-if (-not($data)){Write-Error "没有输入值,例如：JWTxxxxxxxx.....";break;}
-[array]$data=$data -split '\.'
-function frombase64 {
-param([Parameter(Position = 0, ValueFromPipeline  = $True)]
-[string]$a)
-$c=$a.Length
-if((4 -lt $c) -and(0 -ne $c%4)){$b=4-$c%4}elseif($c -lt 4){$b=4-$c}else{$b=0}
-[System.Text.Encoding]::Utf8.GetString([System.Convert]::FromBase64String($a+("="*$b)))}
-$base=@()
-for($i=0;$I -lt ($data.length -1);$i++){
-frombase64 $data[$i]|convertfrom-json}}
-
-
 function Get-ODAuthentication
 {
 	<#
@@ -45,19 +30,43 @@ function Get-ODAuthentication
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
 	PARAM(
-		[Parameter(Mandatory=$True)]
+		[Parameter(Mandatory=$True,HelpMessage="ClientId of your 'app' from https://apps.dev.microsoft.com,'93xxxx81-2a8a-46d7-8524-9xxe07c6xxx0'")]
+		[ValidateScript(
+		{
+		    if ($_ -cmatch '([a-f0-9]{4,}-?){4,}')
+		    {
+		        $true
+		    }
+		    else
+		    {
+		        Throw 'ClientId error'
+		    }
+		})]
 		[string]$ClientId = "unknown",
 		[string]$Scope = "onedrive.readwrite,offline_access",
 		[string]$RedirectURI ="https://login.live.com/oauth20_desktop.srf",
 		[string]$AppKey="",
 		[string]$RefreshToken="",
+		[ValidateScript(
+		{
+		    if ($_ -cmatch '^h(\w)\1ps:\/\/[^,<>/]+?-my.sharepoint.com\/?$|^[^,/]{2,20}$')
+		    {
+		        $true
+		    }
+		    else
+		    {
+		        Throw 'Accepted value: "<tenant>" or "https://<tenant>-my.sharepoint.com/"'
+		    }
+		})]
 		[string]$ResourceId="",
 		[switch]$DontShowLoginScreen=$false,
 		[switch]$AutoAccept,
 		[switch]$LogOut,
-		[switch]$enableglobal
+		[switch]$EnableGlobalVariable
 	)
-	if($ClientId -cnotmatch '([a-f0-9]{4,}-?){4,}'){write-host 'ClientId error' -ForegroundColor red;break}
+	if($ResourceId -cmatch '^[^,<>/]{2,20}$')
+	{$ResourceId="https://${ResourceId}-my.sharepoint.com"}
+	#if($ClientId -cnotmatch '([a-f0-9]{4,}-?){4,}'){write-host 'ClientId error' -ForegroundColor red;break}
 	$optResourceId=""
 	$optOauthVersion="/v2.0"
 	if ($ResourceId -ne "")
@@ -84,12 +93,17 @@ function Get-ODAuthentication
 	} else
 	{
 		write-debug("Authentication mode: " +$Type)
-		$ErrorActionPreference="SilentlyContinue"
-		$null=[Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") 
-		$Verify= $?
-		$ErrorActionPreference="Continue"
-		[Reflection.Assembly]::LoadWithPartialName("System.Drawing") | out-null
-		[Reflection.Assembly]::LoadWithPartialName("System.Web") | out-null
+		try{
+		new-object System.Windows.Forms|out-null
+		}catch{
+		Write-Warning $_.Exception.Message
+		$Verify=1
+		}
+		if($Verify -ne 1){
+		[Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
+		[Reflection.Assembly]::LoadWithPartialName("System.Drawing")
+		[Reflection.Assembly]::LoadWithPartialName("System.Web")
+		}
 		if ($Logout)
 		{
 			$URIGetAccessToken="https://login.live.com/logout.srf"
@@ -107,7 +121,7 @@ function Get-ODAuthentication
 				$URIGetAccessToken="https://login.live.com/oauth20_authorize.srf?client_id="+$ClientId+"&scope="+$Scope+"&response_type="+$Type+"&redirect_URI="+$RedirectURI
 			}
 		}
-		if($Verify){
+		if($Verify -ne 1){
 		$form = New-Object Windows.Forms.Form
 		$form.text = "Authenticate to OneDrive"
 		$form.size = New-Object Drawing.size @(700,600)
@@ -188,10 +202,24 @@ function Get-ODAuthentication
 	if ($appkey){
 	$Authentication | add-member Noteproperty "appkey" ($appkey)
 	}
-	if($enableglobal){
+	if($EnableGlobalVariable){
 	$Global:Authentication=$Authentication
 	}
 <#
+function jwt-decode {
+PAram([Parameter(Mandatory=$true,ValueFromPipeline=$true)][string]$data)
+if (-not($data)){Write-Error "没有输入值,例如：JWTxxxxxxxx.....";break;}
+[array]$data=$data -split '\.'
+function frombase64 {
+param([Parameter(Position = 0, ValueFromPipeline  = $True)]
+[string]$a)
+$c=$a.Length
+if((4 -lt $c) -and(0 -ne $c%4)){$b=4-$c%4}elseif($c -lt 4){$b=4-$c}else{$b=0}
+[System.Text.Encoding]::Utf8.GetString([System.Convert]::FromBase64String($a+("="*$b)))}
+$base=@()
+for($i=0;$I -lt ($data.length -1);$i++){
+frombase64 $data[$i]|convertfrom-json}}
+
 $URL=$Key -replace '[^#]+#' -split '&' -replace '^[^=]+$' -split '='
 $format=@()
 for(($i=0),($j=1);$I -lt $URL.length;($i+=2),($j+=2)){
@@ -258,7 +286,7 @@ function Get-ODWebContent
 	
 	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 	function splash{$string=@()
-	$string=@{ enableglobal=$true}
+	$string=@{ EnableGlobalVariable=$true}
 	if($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}else{
 	if($Authentication.ClientId){$string+=@{ClientId = $Authentication.ClientId}} 
 	if($Authentication.ResourceId){$string+=@{ResourceId=$Authentication.ResourceId}}
@@ -828,7 +856,7 @@ function Add-ODItem
 	)
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	function splash{$string=@()
-	$string=@{ enableglobal=$true}
+	$string=@{ EnableGlobalVariable=$true}
 	if($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}else{
 	if($Authentication.ClientId){$string+=@{ClientId = $Authentication.ClientId}} 
 	if($Authentication.ResourceId){$string+=@{ResourceId=$Authentication.ResourceId}}
@@ -913,7 +941,7 @@ function Add-ODItemLarge {
 	
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	function splash{$string=@()
-	$string=@{ enableglobal=$true}
+	$string=@{ EnableGlobalVariable=$true}
 	if($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}else{
 	if($Authentication.ClientId){$string+=@{ClientId = $Authentication.ClientId}} 
 	if($Authentication.ResourceId){$string+=@{ResourceId=$Authentication.ResourceId}}
