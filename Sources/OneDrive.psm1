@@ -977,7 +977,7 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 		$rURI1=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/createUploadSession").Replace("/root/","/root:/")
 		
 		# Initialize upload session
-		$webRequest=Invoke-WebRequest -Method PUT -Uri $rURI1 -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -UseBasicParsing -ErrorAction SilentlyContinue
+		$webRequest=Invoke-WebRequest -Method PUT -Uri $rURI1 -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -UseBasicParsing
 
 		# Parse the response JSON (into a holder variable)
 		$convertResponse = ($webRequest.Content | ConvertFrom-Json)
@@ -990,7 +990,7 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 		# echo "Total file size (bytes): $totalLength"
 		
 		# Set the upload chunk size (Recommended: 5MB)
-		$uploadLength = 5 * 1024 * 1024; # == 5242880 byte == 5MB.
+		$uploadLength = 1 * 1024 * 1024; # == 5242880 byte == 5MB.
 		# echo "Size of upload fragments (bytes): $uploadLength" # == 5242880
 		
 		# Set the starting byte index of the upload (i. e.: the index of the first byte of the file to upload)
@@ -1037,12 +1037,14 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 				# The (default) length of an upload session is about 15 minutes!
 			
 			# Set the headers for the actual file chunk's PUT request (by means of the above preset variables)
+			if($PSVersionTable.PSEdition -eq 'core'){
+			$actHeaders=@{"Content-Range"="bytes $startingIndex-$endingIndex/$totalLength"};
+			}else{
 			$actHeaders=@{"Content-Length"="$uploadLength"; "Content-Range"="bytes $startingIndex-$endingIndex/$totalLength"};
-			
+			}
 			# Execute the PUT request (upload file chunk)
 			write-debug("Uploading chunk of bytes. Progress: "+$endingIndex/$totalLength*100+" %")
-			$uploadResponse=Invoke-WebRequest -Method PUT -Uri $uURL -Headers $actHeaders -Body $buf -UseBasicParsing -ErrorAction SilentlyContinue
-			
+			$uploadResponse=Invoke-WebRequest -Method PUT -Uri $uURL -Headers $actHeaders -Body $buf -UseBasicParsing
 			# startingIndex should be incremented (with the size of the actually uploaded file chunk) for the next iteration.
 			# (Since the new value for startingIndex was preset above, as newStartingIndex, here we just have to overwrite startingIndex with it!)
 			$startingIndex = $newStartingIndex
@@ -1057,6 +1059,7 @@ if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
 		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 		#return -1
 		$mess=$_.Exception.response.Headers|?{$_.key -like 'WWW-Authenticate'}
+		$_.ErrorDetails.Message
 		if($mess){$mess.value -replace '(^[^=]+?)=','"$1":' `
 		-replace ', *([^ =]+?)=',',"$1":' -replace '^','{' -replace '$','}'|
 		ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
