@@ -1,3 +1,57 @@
+﻿
+function ConvertTo-jwt {
+PAram([Parameter(Mandatory=$true,ValueFromPipeline=$true)][string]$data)
+if (-not($data)){Write-Error "没有输入值,例如：JWTxxxxxxxx.....";break;}
+[array]$data=$data -split '\.'
+function frombase64 {
+param([Parameter(Position = 0, ValueFromPipeline  = $True)]
+[string]$a)
+$c=$a.Length
+if((4 -lt $c) -and(0 -ne $c%4)){$b=4-$c%4}elseif($c -lt 4){$b=4-$c}else{$b=0}
+[System.Text.Encoding]::Utf8.GetString([System.Convert]::FromBase64String($a+("="*$b)))}
+$base=@()
+for($i=0;$I -lt ($data.length -1);$i++){
+frombase64 $data[$i]|convertfrom-json
+}}
+
+function Get-HashValue {param(
+[ValidateScript(
+		{
+		    if (test-path $_ -PathType Leaf )
+		    {
+		        $true
+		    }
+		    else
+		    {
+		        Throw "file does not exist"
+		    }
+		})]
+[Parameter(Mandatory=$true)]
+$file)
+$file=Resolve-Path $file
+$buf=[byte[]]::new(1mb)
+$fd=[IO.FileStream]::new($file, [IO.FileMode]::Open)
+$md5=[System.Security.Cryptography.MD5]::Create()
+$fd.Read($buf,0,$buf.length)|set-variable -name length|out-null
+$object=[PScustomobject]@{filelength=($fd.length -1)}
+$fd.close()
+$object|add-member @{hash=[System.BitConverter]::ToString($md5.ComputeHash($buf))}
+$object|add-member @{file=$file}
+$object
+}
+
+function splash{
+	$a=@{ EnableGlobalVariable=$true}
+	$b=@{}
+	$Authentication|get-member -MemberType NoteProperty|ForEach-Object{
+	if(@( "ResourceId",  "Scope",  "RedirectURI",  "AppKey",  "Refresh_Token",  "ClientId") -contains $_.name){
+	$b+=@{[string]$($_.name -replace '_')=[string]$Authentication.$($_.name)}}}
+	if($ResourceId){
+	if($ResourceId -eq $Authentication.ResourceId){$a+=$b}else{$null=Get-ODAuthentication -ResourceId $ResourceId}
+	}else{$a+=$b}
+	$null=Get-ODAuthentication @a
+}
+
 function Get-ODAuthentication
 {
 	<#
@@ -12,15 +66,15 @@ function Get-ODAuthentication
 	.PARAMETER Scope
 	Comma-separated string defining the authentication scope (https://dev.onedrive.com/auth/msa_oauth.htm). Default: "onedrive.readwrite,offline_access". Not needed for OneDrive 4 Business access.
 	.PARAMETER RefreshToken
-	Refreshes the authentication token unattended with this refresh token. 
+	Refreshes the authentication token unattended with this refresh token.
 	.PARAMETER AutoAccept
 	In token mode the accept button in the web form is pressed automatically.
 	.PARAMETER RedirectURI
-	Code authentication requires a correct URI. Use the same as in the app registration e.g. http://localhost/logon. Default is https://login.live.com/oauth20_desktop.srf. Don't use this parameter for token-based authentication. 
+	Code authentication requires a correct URI. Use the same as in the app registration e.g. http://localhost/logon. Default is https://login.live.com/oauth20_desktop.srf. Don't use this parameter for token-based authentication.
 	.PARAMETER DontShowLoginScreen
-	Suppresses the logon screen. Be careful: If you suppress the logon screen you cannot logon if your credentials are not passed through. 
+	Suppresses the logon screen. Be careful: If you suppress the logon screen you cannot logon if your credentials are not passed through.
 	.PARAMETER LogOut
-	Performs a logout. 
+	Performs a logout.
 
 	.EXAMPLE
     $Authentication=Get-ODAuthentication -ClientId "0000000012345678"
@@ -65,7 +119,7 @@ function Get-ODAuthentication
 		[switch]$EnableGlobalVariable
 	)
 	if($ResourceId -cmatch '^[^,<>/]{2,20}$')
-	{$ResourceId="https://${ResourceId}-my.sharepoint.com"}
+	{$ResourceId="https://${ResourceId}-my.sharepoint.com/"}
 	#if($ClientId -cnotmatch '([a-f0-9]{4,}-?){4,}'){write-host 'ClientId error' -ForegroundColor red;break}
 	$optResourceId=""
 	$optOauthVersion="/v2.0"
@@ -77,10 +131,10 @@ function Get-ODAuthentication
 	}
 	$Authentication=""
 	if ($AppKey -eq "")
-	{ 
+	{
 		$Type="token"
-	} else 
-	{ 
+	} else
+	{
 		$Type="code"
 	}
 	if ($RefreshToken -ne "")
@@ -152,7 +206,7 @@ function Get-ODAuthentication
 		$regex= 'access_token=[^&]+|\?code=[^&]+'
 		do {
 		$key=read-host -prompt 'URL'
-		if (-not($key -match $regex)){write-host "`rERROR" -ForegroundColor DarkCyan|out-host}
+		if (-not($key -match $regex)){write-host "`rERROR,Enter 'exit' to exit read-host" -ForegroundColor DarkCyan|out-host}
 		}until($key -match $regex)
 		$Global:ODAccessToken=($key|select-string -pattern '(?<=token=)[^&]+' ).matches.value
 		$Global:odtokentime=get-date
@@ -165,7 +219,7 @@ function Get-ODAuthentication
 		{
 			write-debug("Getting code to redeem token")
 			$Authentication = New-Object PSObject
-			ForEach ($element in $ReturnURI.Split("?")[1].Split("&")) 
+			ForEach ($element in $ReturnURI.Split("?")[1].Split("&"))
 			{
 				$Authentication | add-member Noteproperty $element.split("=")[0] $element.split("=")[1]
 			}
@@ -181,7 +235,7 @@ function Get-ODAuthentication
 		} else
 		{
 			$Authentication = New-Object PSObject
-			ForEach ($element in $ReturnURI.Split("?")[1].Split("&")) 
+			ForEach ($element in $ReturnURI.Split("?")[1].Split("&"))
 			{
 				$Authentication | add-member Noteproperty $element.split("=")[0] $element.split("=")[1]
 			}
@@ -206,20 +260,6 @@ function Get-ODAuthentication
 	$Global:Authentication=$Authentication
 	}
 <#
-function jwt-decode {
-PAram([Parameter(Mandatory=$true,ValueFromPipeline=$true)][string]$data)
-if (-not($data)){Write-Error "没有输入值,例如：JWTxxxxxxxx.....";break;}
-[array]$data=$data -split '\.'
-function frombase64 {
-param([Parameter(Position = 0, ValueFromPipeline  = $True)]
-[string]$a)
-$c=$a.Length
-if((4 -lt $c) -and(0 -ne $c%4)){$b=4-$c%4}elseif($c -lt 4){$b=4-$c}else{$b=0}
-[System.Text.Encoding]::Utf8.GetString([System.Convert]::FromBase64String($a+("="*$b)))}
-$base=@()
-for($i=0;$I -lt ($data.length -1);$i++){
-frombase64 $data[$i]|convertfrom-json}}
-
 $URL=$Key -replace '[^#]+#' -split '&' -replace '^[^=]+$' -split '='
 $format=@()
 for(($i=0),($j=1);$I -lt $URL.length;($i+=2),($j+=2)){
@@ -227,15 +267,30 @@ $format+=@{$URL[$i]=$URL[$j]}}
 $access_token=jwt-decode $format.access_token
 $global:authen=jwt-decode $format.authentication_token
 $global:authentication_token=
-(Get-Date 01.01.1970)+([System.TimeSpan]::fromseconds($authen.exp[1])) 
+(Get-Date 01.01.1970)+([System.TimeSpan]::fromseconds($authen.exp[1]))
 #>
-	return $Authentication 
+	return $Authentication
 }
-function Get-ODRootUri 
+function Get-ODRootUri
 {
 	PARAM(
+		[ValidateScript(
+		{
+		    if ($_ -cmatch '^h(\w)\1ps:\/\/[^,<>/]+?-my.sharepoint.com\/?$|^[^,/]{2,20}$' -or $_ -eq '')
+		    {
+		        $true
+		    }
+		    else
+		    {
+		        Throw 'Accepted value: "<tenant>" or "https://<tenant>-my.sharepoint.com/"'
+		    }
+		})]
 		[String]$ResourceId=""
 	)
+	if($ResourceId -cmatch '^[^,<>/]{2,20}$')
+	{$ResourceId="https://${ResourceId}-my.sharepoint.com"}
+	if($ResourceId -cmatch 'https:\/\/[^,<>/]{2,20}-my.sharepoint.com$')
+	{$ResourceId=$($ResourceId -replace '(\w$)','$1/')}
 	if ($ResourceId -ne "")
 	{
 		return $ResourceId+"_api/v2.0"
@@ -246,7 +301,7 @@ function Get-ODRootUri
 	}
 }
 
-function Get-ODWebContent 
+function Get-ODWebContent
 {
 	<#
 	.DESCRIPTION
@@ -271,79 +326,19 @@ function Get-ODWebContent
 		[string]$AccessToken,
 		[String]$ResourceId="",
 		[string]$rURI = "",
-		[ValidateSet("PUT","GET","POST","PATCH","DELETE")] 
+		[ValidateSet("PUT","GET","POST","PATCH","DELETE")]
         [String]$Method="GET",
 		[String]$Body,
 		[switch]$BinaryMode
 	)
-	if ($Body -eq "") 
+	if ($Body -eq "")
 	{
 		$xBody=$null
 	} else
 	{
 		$xBody=$Body
 	}
-	
-	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
-	function splash{$string=@()
-	$string=@{ EnableGlobalVariable=$true}
-	if($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}else{
-	if($Authentication.ClientId){$string+=@{ClientId = $Authentication.ClientId}} 
-	if($Authentication.ResourceId){$string+=@{ResourceId=$Authentication.ResourceId}}
-	if($Authentication.refresh_token){$string+=@{RefreshToken=$Authentication.refresh_token}}
-	if($Authentication.appkey){$string+=@{appkey=$Authentication.appkey}}}
-	$string}
-	$string= splash
-	if (!($Authentication)){$Global:Authentication = New-Object PSObject}
-	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
-	switch ($Authentication.ResourceId -eq $null) {
-	true {$Authentication | add-member Noteproperty 'access_token' ($AccessToken)}
-	false {$Authentication.access_token=$AccessToken}}}
-	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
-	switch ($Authentication.ResourceId -eq $null) {
-	false {$Authentication.ResourceId=$ResourceId}
-	true {$Authentication | add-member Noteproperty 'ResourceId' ($ResourceId)}}}
-	$code=@('WWW-Authenticate')
-do{
-if($mess){
-$null=Get-ODAuthentication @string
-if(!($?)){break}
-remove-variable mess -force
-$string=splash
-if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
-if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
-	try {
-		$webRequest=Invoke-WebRequest -Method $Method -Uri ($ODRootURI+$rURI) -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -Body $xBody -UseBasicParsing
-	} 
-	catch
-	{
-		$mess=$_.Exception.response.Headers|?{$_.key -like 'WWW-Authenticate'}
-		if($mess){$mess.value -replace '(^[^=]+?)=','"$1":' `
-		-replace ', *([^ =]+?)=',',"$1":' -replace '^','{' -replace '$','}'|
-		ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
-	}
-}until($code -notcontains $mess.key)
-	switch ($webRequest.StatusCode) 
-    { 
-        200 
-		{
-			if (!$BinaryMode) {$responseObject = ConvertFrom-Json $webRequest.Content}
-			return $responseObject
-		} 
-        201 
-		{
-			write-debug("Success: "+$webRequest.StatusCode+" - "+$webRequest.StatusDescription)
-			if (!$BinaryMode) {$responseObject = ConvertFrom-Json $webRequest.Content}
-			return $responseObject
-		} 
-        204 
-		{
-			write-debug("Success: "+$webRequest.StatusCode+" - "+$webRequest.StatusDescription+" (item deleted)")
-			$responseObject = "0"
-			return $responseObject
-		} 
-        #default {write-warning("Cannot access the api. Webrequest return code is: "+$webRequest.StatusCode+"`n"+$webRequest.StatusDescription)}
-    }
+	getweb -Method $Method -Body $xBody -accesstoken $accesstoken -ResourceId $ResourceId
 }
 
 function Get-ODDrives
@@ -368,7 +363,7 @@ function Get-ODDrives
 		[String]$ResourceId=""
 	)
 	$ProgressPreference="SilentlyContinue"
-	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method GET -rURI "/drives" 
+	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method GET -rURI "/drives"
 	return $ResponseObject.Value
 }
 
@@ -426,8 +421,8 @@ function Format-ODPathorIdString
 		# Use ElementId parameters
 		if (!$Path -eq "") {write-debug("Warning: Path and ElementId parameters are set. Only ElementId is used!")}
 		$drive="/drive"
-		if ($DriveId -ne "") 
-		{	
+		if ($DriveId -ne "")
+		{
 			# Named drive
 			$drive="/drives/"+$DriveId
 		}
@@ -449,11 +444,11 @@ function Format-ODPathorIdString
 		$tmpString=""
 		foreach ($Sub in $Path.Split("/")) {$tmpString+=$Sub+"/"}
 		$Path=$tmpString
-		# remove last "/" if exist 
+		# remove last "/" if exist
 		$Path=$Path.TrimEnd("/")
 		# insert drive part of URL
-		if ($DriveId -eq "") 
-		{	
+		if ($DriveId -eq "")
+		{
 			# Default drive
 			$Path="/drive/root:"+$Path+":"
 		}
@@ -489,7 +484,7 @@ function Get-ODItemProperty
 	Get the default set of metadata for a file or folder (name, size, lastModifiedDateTime, id)
 
 	Get-ODItemProperty -AccessToken $AuthToken -ElementId 8BADCFF017EAA324!12169 -SelectProperties ""
-	Get all metadata of a file or folder by element id ("" select all properties)	
+	Get all metadata of a file or folder by element id ("" select all properties)
 	.NOTES
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
@@ -552,10 +547,10 @@ function Get-ODChildItems
 	$ProgressPreference="SilentlyContinue"
 	$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 	if ($Path.Contains('$skiptoken=') -or $Loop)
-	{	
+	{
 		# Recursive mode of odata.nextLink detection
 		write-debug("Recursive call")
-		$rURI=$Path	
+		$rURI=$Path
 	}
 	else
 	{
@@ -577,7 +572,7 @@ function Get-ODChildItems
 		}
 		else
 		{
-			if (!$SearchText -eq "") 
+			if (!$SearchText -eq "")
 			{
 				# Search mode
 				$opt="/view.search?q="+$SearchText+"&select="+$SelectProperties
@@ -592,7 +587,7 @@ function Get-ODChildItems
 	}
 	write-debug("Accessing API with GET to "+$rURI)
 	$ResponseObject=Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method GET -rURI $rURI
-	if ($ResponseObject.PSobject.Properties.name -match "@odata.nextLink") 
+	if ($ResponseObject.PSobject.Properties.name -match "@odata.nextLink")
 	{
 		write-debug("Getting more elements form service (@odata.nextLink is present)")
 		write-debug("LAST: "+$ResponseObject.value.count)
@@ -631,7 +626,7 @@ function Search-ODItems
 	.PARAMETER DriveId
 	Specifies the OneDrive drive id. If not set, the default drive is used.
 	.EXAMPLE
-    Search-ODItems -AccessToken $AuthToken -Path "/My pictures" -SearchText "FolderA" 
+    Search-ODItems -AccessToken $AuthToken -Path "/My pictures" -SearchText "FolderA"
     Search-ODItems <SearchText>
     Search-ODItems <SearchText> <folder id>
     Search-ODItems <SearchText> <folder id> <SelectProperties(name,size)>
@@ -735,14 +730,16 @@ function Remove-ODItem
 		[string]$DriveId=""
 	)
 	$ProgressPreference="SilentlyContinue"
-	if (($ElementId+$Path) -eq "") 
+	if (($ElementId+$Path) -eq "")
 	{
 		write-error("Path nor ElementId is set")
 	}
 	else
 	{
 		$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
-		return Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method DELETE -rURI $rURI 
+		$delete=Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method DELETE -rURI $rURI
+		if($delete -eq 0){"deleted file: $Path$ElementId"|out-host}
+		#return
 	}
 }
 
@@ -771,6 +768,7 @@ function Get-ODItem
 	.NOTES
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
+	[CmdletBinding()]
 	PARAM(
 		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
@@ -783,7 +781,7 @@ function Get-ODItem
 		[string]$LocalPath="",
 		[string]$LocalFileName
 	)
-	if (($ElementId+$Path) -eq "") 
+	if (($ElementId+$Path) -eq "")
 	{
 		write-error("Path nor ElementId is set")
 	}
@@ -791,32 +789,35 @@ function Get-ODItem
 	{
 
 		$Download=Get-ODItemProperty -AccessToken $AccessToken -ResourceId $ResourceId -Path $Path -ElementId $ElementId -DriveId $DriveId -SelectProperties "name,@content.downloadUrl,lastModifiedDateTime"
+		if($Download){
 		if ($LocalPath -eq "") {$LocalPath=Get-Location}
 		$LocalPath=resolve-Path ($LocalPath.TrimEnd("\")+"\")
+		write-verbose "Downloadlink: $($Download.'@content.downloadUrl')"
 		if ($LocalFileName -eq "")
 		{
 			$SaveTo=$LocalPath+$Download.name
 		}
 		else
 		{
-			$SaveTo=$LocalPath+$LocalFileName		
+			$SaveTo=$LocalPath+$LocalFileName
 		}
 		try
 		{
-			[System.Net.WebClient]::WebClient
+
 			$client = New-Object System.Net.WebClient
 			$client.DownloadFile($Download."@content.downloadUrl",$SaveTo)
 			$file = Get-Item $saveTo
             $file.LastWriteTime = $Download.lastModifiedDateTime
 			write-verbose("Download complete")
-			return 0
+
+			return (Get-Item $saveTo)
 		}
 		catch
 		{
 			write-error("Download error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
 			return -1
-		}
-	}	
+		}}
+	}
 }
 function Add-ODItem
 {
@@ -836,7 +837,7 @@ function Add-ODItem
 	.PARAMETER LocalFile
 	Path and file of the local file to be uploaded (C:\data\data.csv).
 	.EXAMPLE
-    Add-ODItem -AccessToken $AuthToken -Path "/Data/documents/2016" -LocalFile "AzureML with PowerShell.docx" 
+    Add-ODItem -AccessToken $AuthToken -Path "/Data/documents/2016" -LocalFile "AzureML with PowerShell.docx"
     Upload a file to OneDrive "/data/documents/2016"
 	.NOTES
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
@@ -845,61 +846,26 @@ function Add-ODItem
 		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
-		[Parameter(Mandatory=$true,ParameterSetName="path")]
 		[string]$Path="/",
-		[Parameter(Mandatory=$true,ParameterSetName="id")]
 		[string]$ElementId="",
 		[string]$DriveId="",
-		[Parameter(Mandatory=$true,ParameterSetName="path")]
-		[Parameter(Mandatory=$true,ParameterSetName="id")]
+		[ValidateScript(
+		{
+		    if (test-path $_ -PathType Leaf )
+		    {
+		        $true
+		    }
+		    else
+		    {
+		        Throw "file does not exist"
+		    }
+		})]
+		[Parameter(Mandatory=$true)]
 		[string]$LocalFile=""
 	)
+	if($ElementId -and $Path){throw '"-ElementId" and "-Path"Cannot coexist';break}
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
-	function splash{$string=@()
-	$string=@{ EnableGlobalVariable=$true}
-	if($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}else{
-	if($Authentication.ClientId){$string+=@{ClientId = $Authentication.ClientId}} 
-	if($Authentication.ResourceId){$string+=@{ResourceId=$Authentication.ResourceId}}
-	if($Authentication.refresh_token){$string+=@{RefreshToken=$Authentication.refresh_token}}
-	if($Authentication.appkey){$string+=@{appkey=$Authentication.appkey}}}
-	$string}
-	$string= splash
-	if (!($Authentication)){$Global:Authentication = New-Object PSObject}
-	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
-	switch ($Authentication.ResourceId -eq $null) {
-	true {$Authentication | add-member Noteproperty 'access_token' ($AccessToken)}
-	false {$Authentication.access_token=$AccessToken}}}
-	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
-	switch ($Authentication.ResourceId -eq $null) {
-	false {$Authentication.ResourceId=$ResourceId}
-	true {$Authentication | add-member Noteproperty 'ResourceId' ($ResourceId)}}}
-	$code=@('WWW-Authenticate')
-do{
-if($mess){
-$null=Get-ODAuthentication @string
-if(!($?)){break}
-remove-variable mess -force
-$string=splash
-if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
-if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
-	try
-	{
-		$spacer=""
-		if ($ElementId -ne "") {$spacer=":"}
-		$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
-		$ruri1=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/content").Replace("/root/","/root:/")
-		return $webRequest=Invoke-WebRequest -Method PUT -InFile $LocalFile -Uri $rURI1 -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "multipart/form-data"  -UseBasicParsing -ErrorAction SilentlyContinue|%{$_.content}|convertfrom-json
-	}
-	catch
-	{
-		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
-		#return -1
-		$mess=$_.Exception.response.Headers|?{$_.key -like 'WWW-Authenticate'}
-		if($mess){$mess.value -replace '(^[^=]+?)=','"$1":' `
-		-replace ', *([^ =]+?)=',',"$1":' -replace '^','{' -replace '$','}'|
-		ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
-	}
-}until($code -notcontains $mess.key)
+	getweb -method put -accesstoken $accesstoken -ResourceId $ResourceId -localfile $LocalFile -additem
 }
 function Add-ODItemLarge {
 	<#
@@ -919,152 +885,135 @@ function Add-ODItemLarge {
 		.PARAMETER LocalFile
 		Path and file of the local file to be uploaded (C:\data\data.csv).
 		.EXAMPLE
-		Add-ODItem -AccessToken $AuthToken -Path "/Data/documents/2016" -LocalFile "AzureML with PowerShell.docx" 
+		Add-ODItem -AccessToken $AuthToken -Path "/Data/documents/2016" -LocalFile "AzureML with PowerShell.docx"
 		Upload a file to OneDrive "/data/documents/2016"
 		.NOTES
 		Author: Benke Tamás - (funkeninduktor@gmail.com)
 	#>
-	
+	[CmdletBinding()]
 	PARAM(
 		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
-		[Parameter(Mandatory=$true,ParameterSetName="path")]
 		[string]$Path="/",
-		[Parameter(Mandatory=$true,ParameterSetName="id")]
 		[string]$ElementId="",
 		[string]$DriveId="",
-		[Parameter(Mandatory=$true,ParameterSetName="path")]
-		[Parameter(Mandatory=$true,ParameterSetName="id")]
-		[string]$LocalFile=""
+		[ValidateScript(
+		{
+		    if (test-path $_ -PathType Leaf )
+		    {
+		        $true
+		    }
+		    else
+		    {
+		        Throw "file does not exist"
+		    }
+		})]
+		[Parameter(Mandatory=$true)]
+		[string]$LocalFile="",
+		[int64]$uploadLength=5mb
 	)
-	
+	if($ElementId -and $Path){throw '"-ElementId" and "-Path"Cannot coexist';break}
+	$LocalFile=Resolve-Path $LocalFile
+	if($uploadLength -lt 320kb*2){$uploadLength = 5 * 1024 * 1024}
+	$br=$true
+	@("$($env:USERNAME)\appdata\local\Temp\","/tmp/")|ForEach-Object{
+	if($br -and (test-path $_)){$tmp="${_}one.tmp";$br=$false}}
+	if(test-path $tmp){$schedule = get-content -path $tmp -raw
+
+	if(test-json $schedule){
+	$schedule = $schedule|convertfrom-json
+	if($schedule."expirationDateTime" -is [datetime]){$time=(new-timespan (get-date) $schedule."expirationDateTime").TotalSeconds
+	}}}
+
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
-	function splash{$string=@()
-	$string=@{ EnableGlobalVariable=$true}
-	if($ResourceId -cmatch '.{10,}'){$string+=@{ResourceId=$ResourceId}}else{
-	if($Authentication.ClientId){$string+=@{ClientId = $Authentication.ClientId}} 
-	if($Authentication.ResourceId){$string+=@{ResourceId=$Authentication.ResourceId}}
-	if($Authentication.refresh_token){$string+=@{RefreshToken=$Authentication.refresh_token}}
-	if($Authentication.appkey){$string+=@{appkey=$Authentication.appkey}}}
-	$string}
-	$string= splash
-	if (!($Authentication)){$Global:Authentication = New-Object PSObject}
-	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
-	switch ($Authentication.ResourceId -eq $null) {
-	true {$Authentication | add-member Noteproperty 'access_token' ($AccessToken)}
-	false {$Authentication.access_token=$AccessToken}}}
-	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
-	switch ($Authentication.ResourceId -eq $null) {
-	false {$Authentication.ResourceId=$ResourceId}
-	true {$Authentication | add-member Noteproperty 'ResourceId' ($ResourceId)}}}
-	$code=@('WWW-Authenticate')
-do{
-if($mess){
-$null=Get-ODAuthentication @string
-if(!($?)){break}
-remove-variable mess -force
-$string=splash
-if($accesstoken){get-variable accesstoken|clear-variable|remove-variable}}
-if (-not($AccessToken)){$AccessToken=$Authentication.access_token}
-	Try	{
+	write-verbose 'Calculating file hash'
+	$hash=get-hashvalue -file $LocalFile
+
+
 		# Begin to construct the real (full) URI
 		$spacer=""
 		if ($ElementId -ne "") {$spacer=":"}
-		$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
-		
-		# Construct the real (full) URI
-		$rURI1=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/createUploadSession").Replace("/root/","/root:/")
-		
-		# Initialize upload session
-		$webRequest=Invoke-WebRequest -Method PUT -Uri $rURI1 -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -UseBasicParsing
 
+
+		if($null -eq $time -or $time -lt 20){
+		if(test-path $tmp){remove-item $tmp -force
+		$delete=getweb -Method Delete -uri $schedule.uploadUrl -accesstoken $accesstoken -ResourceId $ResourceId
+		if($delete -eq 0){write-verbose "deleted $($schedule.uploadUrl)"}
+		}; $time = $null
+		}
+		$fd=[IO.FileStream]::new($localfile, [IO.FileMode]::Open)
+		$totalLength=$fd.length
+		$ci=[math]::Ceiling($totalLength/$uploadLength)
+
+		if(($schedule.hash -eq $hash.hash -and $schedule.filelength -eq $hash.filelength) -and $time -gt 20){
+		$uURL=$schedule.uploadUrl
+		$getdata=getweb -method get -accesstoken $accesstoken -ResourceId $ResourceId -uri $uurl
+		write-verbose "getdata: $($getdata.nextExpectedRanges)"
+		[int64]$startingIndex =if($getdata){$getdata.nextExpectedRanges.split('-')[0]}else{remove-item $tmp -force ;return '获取在线进度出错，删除记录'}
+		$convertResponse=$schedule
+
+		}else{
+		# Initialize upload session
+		$convertResponse=getweb -method PUT -accesstoken $accesstoken -ResourceId $ResourceId -largelocalfile $localfile  -additem
 		# Parse the response JSON (into a holder variable)
-		$convertResponse = ($webRequest.Content | ConvertFrom-Json)
+
 		# Get the uploadUrl from the response (holder variable)
 		$uURL = $convertResponse.uploadUrl
-		# echo "HERE COMES THE CORRECT uploadUrl: $uURL"
-		
-		# Get the full size of the file to upload (bytes)
-		$totalLength = (Get-Item $LocalFile).length
-		# echo "Total file size (bytes): $totalLength"
-		
-		# Set the upload chunk size (Recommended: 5MB)
-		$uploadLength = 1 * 1024 * 1024; # == 5242880 byte == 5MB.
-		# echo "Size of upload fragments (bytes): $uploadLength" # == 5242880
-		
+		$convertResponse|add-member @{LocalFile=$LocalFile;hash=$hash.hash;filelength=$hash.filelength}
+		if($ci -gt 1){$convertResponse |convertto-json|set-content -path $tmp}
 		# Set the starting byte index of the upload (i. e.: the index of the first byte of the file to upload)
 		$startingIndex = 0
-		
-		# Start an endless cycle to run until the last chunk of the file is uploaded (after that, BREAK out of the cycle)
-		while($True){
-			# If startingIndex (= the index of the starting byte) is greater than, or equal to totalLength (= the total length of the file), stop execution, so BREAK out of the cycle
-			if( $startingIndex -ge $totalLength ){
-				break
-			}
-			
-			# Otherwise: set the suitable indices (variables)
-			
-			# (startingIndex remains as it was!)
-			
-			# Set the size of the chunk to upload
-			# The remaining length of the file (to be uploaded)
-			$remainingLength = $($totalLength-$startingIndex)
-			# If remainingLength is smaller than the normal upload length (defined above as uploadLength), then the new uploadLength will be the remainingLength (self-evidently, only for the last upload chunk)
-			if( $remainingLength -lt $uploadLength ){
-				$uploadLength = $remainingLength
-			}
-			# Set the new starting index (just for the next iteration!)
-			$newStartingIndex = $($startingIndex+$uploadLength)
-			# Get the ending index (by means of newStartingIndex)
-			$endingIndex = $($newStartingIndex-1)
-			
-			# Get the bytes to upload into a byte array (using properly re-initialized variables)
-			$buf = new-object byte[] $uploadLength
-			$fs = new-object IO.FileStream($LocalFile, [IO.FileMode]::Open)
-			$reader = new-object IO.BinaryReader($fs)
-			$reader.BaseStream.Seek($startingIndex,"Begin") | out-null
-			$reader.Read($buf, 0, $uploadLength)| out-null
-			$reader.Close()
-			# echo "Chunk size is: $($buf.count)"
-			
-			# Upoad the actual file chunk (byte array) to the actual upload session.
-			# Some aspects of the chunk upload:
-				# We don't have to authenticate for the chunk uploads, since the uploadUrl contains the upload session's authentication data as well.
-				# We above calculated the length, and starting and ending byte indices of the actual chunk, and the total size of the (entire) file. These should be set into the upload's PUT request headers.
-				# If the upload session is alive, every file chunk (including the last one) should be uploaded with the same command syntax.
-				# If the last chunk was uploaded, the file is automatically created (and the upload session is closed).
-				# The (default) length of an upload session is about 15 minutes!
-			
-			# Set the headers for the actual file chunk's PUT request (by means of the above preset variables)
-			if($PSVersionTable.PSEdition -eq 'core'){
-			$actHeaders=@{"Content-Range"="bytes $startingIndex-$endingIndex/$totalLength"};
-			}else{
-			$actHeaders=@{"Content-Length"="$uploadLength"; "Content-Range"="bytes $startingIndex-$endingIndex/$totalLength"};
-			}
-			# Execute the PUT request (upload file chunk)
-			write-debug("Uploading chunk of bytes. Progress: "+$endingIndex/$totalLength*100+" %")
-			$uploadResponse=Invoke-WebRequest -Method PUT -Uri $uURL -Headers $actHeaders -Body $buf -UseBasicParsing
-			# startingIndex should be incremented (with the size of the actually uploaded file chunk) for the next iteration.
-			# (Since the new value for startingIndex was preset above, as newStartingIndex, here we just have to overwrite startingIndex with it!)
-			$startingIndex = $newStartingIndex
 		}
-		# The upload is done!
-		
+
+$wc=New-Object System.Net.WebClient
+$start=get-date
+while(![String]::IsNullOrEmpty($startingIndex)){
+$seek=$fd.seek($startingIndex,'begin')
+$uploadLength=[math]::Min($uploadLength,$totalLength-$startingIndex )
+$buf=[byte[]]::new($uploadLength)
+$read=$fd.Read($buf,0,$uploadLength)
+
+$endingIndex=$startingIndex+$uploadLength-1
+$object=[PScustomobject]@{
+'start'=yunsuan $startingIndex
+'end'=yunsuan ($endingIndex+1)
+'totalLength'=yunsuan $totalLength
+'length'=yunsuan $uploadLength
+#'seek'=yunsuan $seek
+ExpectedRanges=$uploadresponse.nextExpectedRanges
+#read=$read
+次数=$_
+#buf=$buf.length #[$uploadLength]
+#localfile=$localfile
+}
+
+Write-Verbose ($object | Format-Table | Out-String)
+$info="$([int64](($totalLength-$startingIndex)/1024))k/$([int64]($totalLength/1024))k:"
+write-debug $info
+
+$progress=[int64]($startingIndex/$totalLength*100)
+
+Write-Progress -Activity "File uploading:$LocalFile" -Status "$progress% Complete $info" -PercentComplete $progress
+$wc.headers.set("Content-Length",$uploadLength)
+$wc.headers.set("Content-Range","bytes $startingIndex-$endingIndex/$totalLength")
+try{
+[System.Text.Encoding]::ASCII.GetString($wc.UploadData($uurl,'PUT',$buf)) |convertfrom-json|set-variable uploadresponse -PassThru  |ForEach-Object{$json=$_.value;'nextExpectedRanges','expirationDateTime'|ForEach-Object{$convertResponse.$_=$json.$_};$convertResponse}|convertto-json|ForEach-Object{if($ci -gt 1){set-content -value $_ -path $tmp}}
+}catch{
+write-warning $_.Exception.Message
+write-warning 'Will try again'
+}
+try{
+$startingIndex = [int64]$uploadResponse.nextExpectedRanges.split('-')[0]
+}catch{
+remove-variable startingIndex -force
+}
+
+}
+$fd.Dispose()
 		# At the end of the upload, write out the last response, which should be a confirmation message: "HTTP/1.1 201 Created"
 		write-debug("Upload complete")
-		return ($uploadResponse.Content | ConvertFrom-Json)
-	}
-	Catch {
-		write-error("Upload error: "+$_.Exception.Response.StatusCode+"`n"+$_.Exception.Response.StatusDescription)
-		#return -1
-		$mess=$_.Exception.response.Headers|?{$_.key -like 'WWW-Authenticate'}
-		$_.ErrorDetails.Message
-		if($mess){$mess.value -replace '(^[^=]+?)=','"$1":' `
-		-replace ', *([^ =]+?)=',',"$1":' -replace '^','{' -replace '$','}'|
-		ConvertFrom-Json|out-host}else{Write-warning ($_.Exception.Message)}
-	}
-}until($code -notcontains $mess.key)
+		return $uploadResponse
 }
 function Move-ODItem
 {
@@ -1090,8 +1039,10 @@ function Move-ODItem
 	Moves and renames a file in one step
 
 	Move-ODItem  -AccessToken $at -path "/Notes.txt" -NewName "_Notes.txt" # Rename a file
-	
-	Move-ODItem  -AccessToken $at -path "/Notes.txt" -TargetPath "/x"      # Move a file
+
+	Move-ODItem  -AccessToken $at -path "/Notes.txt" -TargetPath "/x" -verbose  # Move a file
+	Move-ODItem -path /qq/gh.json -TargetPath ::   -verbose
+	Move to the root directory
 	.NOTES
     Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
 	#>
@@ -1099,16 +1050,15 @@ function Move-ODItem
 		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
-		[Parameter(Mandatory=$true,ParameterSetName="path")]
+		[Parameter(parametersetname='path')]
 		[string]$Path="",
-		[Parameter(Mandatory=$true,ParameterSetName="id")]
+		[Parameter(parametersetname='ElementId')]
 		[string]$ElementId="",
 		[string]$DriveId="",
 		[string]$TargetPath="",
 		[string]$NewName=""
 	)
-	$ProgressPreference="SilentlyContinue"
-	if (($ElementId+$Path) -eq "") 
+	if (($ElementId+$Path) -eq "")
 	{
 		write-error("Path nor ElementId is set")
 	}
@@ -1119,9 +1069,9 @@ function Move-ODItem
 			write-error("TargetPath nor NewName is set")
 		}
 		else
-		{	
+		{
 			$body='{'
-			if (!$NewName -eq "") 
+			if (!$NewName -eq "")
 			{
 				$body=$body+'"name": "'+$NewName+'"'
 				If (!$TargetPath -eq "")
@@ -1129,25 +1079,26 @@ function Move-ODItem
 					$body=$body+','
 				}
 			}
-			if (!$TargetPath -eq "") 
+			if (!$TargetPath -eq "")
 			{
 				$rTURI=Format-ODPathorIdString -path $TargetPath -DriveId $DriveId
+				$rTURI=$rTURI -replace ':$'
 				$body=$body+'"parentReference" : {"path": "'+$rTURI+'"}'
 			}
 			$body=$body+'}'
-			$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
+			$rURI=(Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId).TrimEnd(':')
 			return Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method PATCH -rURI $rURI -Body $body
 		}
 	}
 }
-function get-ODShareLinkDownload
+function Get-ODShareLinkDownload
 	<#
 	.DESCRIPTION
 	Download a shared file
 	.PARAMETER URL
 	onedrive.live.com Share links
 	.PARAMETER path
-	
+
 	.EXAMPLE
     get-ODShareLinkDownload -URL https://1drv.ms/f/s!AtftJLuuzIqngqg598UpNi1x5YJ8bQ
 	Download a file
@@ -1162,11 +1113,85 @@ function get-ODShareLinkDownload
         [Parameter(Mandatory=$true,Position=0)]
         [string]$uri,
         [Parameter(Mandatory=$false,Position=1)]
-        [string]$path='./') 
+        [string]$path='./')
         if(-not(Test-Path $path)){write-host -ForegroundColor DarkCyan 'Tips：error path';break}
         if($path -match '[^/]$'){
         $path=  (resolve-path -path $path).path+"/"}
 $ProgressPreference=    "SilentlyContinue"
+
+function Folder-downloads {
+PAram([string]$URL,[string]$path='./')
+[array]$URL=$URL
+$path=(resolve-path -path $path).path
+$data=@()
+[array]$path1=$path
+$yuan='https://storage.live.com/items/'
+$folderID=@()
+do {
+if ($null -ne $folderID[0] -and $folderID[0] -ne $replace){
+[string]$replace=$folderID[0]
+$url=@()
+[array]$folder=$path1|select-object -Skip $folder.length
+$path1=@()
+for ($i=0;$i -lt $folder.length;$i++) {
+for ($x=0;$X -lt $folderName.length;$x++) {
+$path1+=$folder[$i]+$folderName[$x]+'/'
+$itempath=$folder[$i]+$folderName[$x]+"/"
+$null=New-Item -path "$itempath" -itemtype Directory -force}}
+$folderID|ForEach-Object{$url+="$yuan$_$key"}
+Remove-variable folderName,folderID  -force}
+for ($x=0;$x -lt $URL.length;$x++){
+$xml=Invoke-RestMethod $URL[$x]
+$dd= [System.Text.Encoding]::UTF8.GetString([System.Text.Encoding]::GetEncoding(28591).GetBytes($xml))
+$key='?'+ ($URL[$x] |select-string -pattern 'authkey.*$').matches.value
+$dd=$([XML]$($dd  -replace '^[^<]+')).Folder.Items
+[array]$ResourceID=$dd.Document.ResourceID
+[array]$RelationshipName=$dd.Document.RelationshipName
+for ($i=0;$I -lt $ResourceID.length;$i++){
+$data+=[PScustomobject]@{
+ResourceID=$ResourceID[$i]
+RelationshipName=$RelationshipName[$i]
+path= $path1[$x]+$RelationshipName[$i]
+url=($yuan+$ResourceID[$i]+$key)}}
+[array]$folderID=$dd.folder.ResourceID
+[array]$folderName=$dd.folder.RelationshipName}
+} until ($null -eq $folderID)
+$script=@()
+For ( $x=0; $x -lt $data.length;$x++){
+$path=$data.path[$x]
+$URL=$data.url[$x]
+$script+="iwr '$URL' -o '$path'"}
+if ($script -is [array] -and $script.length -gt 5){
+runspace0 $script
+}elseif($script -is [string]){Invoke-Expression $script}else{
+for ($x=0;$x -lt $script.length;$x++){
+Invoke-Expression $script[$x]}}
+write-host "文件数量："$ResourceID.count -ForegroundColor Blue|out-host
+$data}
+
+if ($uri -notmatch 'onedrive|skydrive|storage'){
+        $link=Invoke-WebRequest  $uri -MaximumRedirection 0 -SkipHttpErrorCheck -ErrorAction Ignore
+        $link=$link.headers.location
+}else{$link=$uri}
+if ($link -match 'ithint\=folder'){
+        $link= $link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)\?resid\=(.*?\d)(\&a.*)$','$1storage$2items/$3?$4'
+        [PScustomobject]@{链接地址=$link}|format-table -wrap
+        Folder-downloads -URL $link -path $path
+}else{
+	#$link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)(.*)$','$1skydrive$2download$3'|out-host
+	#$link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)\?resid\=(.*?\d)(\&a.*)$','$1storage$2items/$3?$4'|out-host
+	$link= $link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)(.*)$','$1skydrive$2download$3'
+	#$link=iwr  $uri -MaximumRedirection 0 -SkipHttpErrorCheck -ErrorAction Ignore
+	[PScustomobject]@{链接地址=$link}|format-table -wrap
+	$data=Invoke-WebRequest "$link"
+	$replace=$data.headers.'Content-Disposition' -replace '^.*?(?=[^ ''"]+$)'
+	$name=[System.Web.HttpUtility]::UrlDecode($replace)
+	set-content -value $data -path "$path$name"
+	[PScustomobject]@{
+	name=$name
+	path=$path
+	URL=$link
+}}}
 
 function Runspace0{
 param($ScriptBlock)
@@ -1202,80 +1227,86 @@ $ss=$ss += $threads[$x].EndInvoke($handles[$x])
 $threads[$x].Dispose()
 $handles[$x]=$null
 $threads[$x]=$null}}
-if ($handles.IsCompleted -ne $null){$done = $false}
+if ($null -ne $handles.IsCompleted){$done = $false}
 if (-not $done) { Start-Sleep -Milliseconds 900 }
 } until ($done)
-($ss |sort-object -Property id).code}
+($ss |sort-object -Property id).code
+}
 
-function Folder-downloads {
-PAram([string]$URL,[string]$path='./')
-[array]$URL=$URL
-$path=(resolve-path -path $path).path
-$data=@()
-[array]$path1=$path
-$yuan='https://storage.live.com/items/'
-$folderID=@()
-do {
-if ($folderID[0] -ne $null -and $folderID[0] -ne $replace){
-[string]$replace=$folderID[0]
-$url=@()
-[array]$folder=$path1|select-object -Skip $folder.length
-$path1=@()
-for ($i=0;$i -lt $folder.length;$i++) {
-for ($x=0;$X -lt $folderName.length;$x++) {
-$path1+=$folder[$i]+$folderName[$x]+'/'
-$itempath=$folder[$i]+$folderName[$x]+"/"
-$null=New-Item -path "$itempath" -itemtype Directory -force}}
-$folderID|%{$url+="$yuan$_$key"}
-Remove-variable folderName,folderID  -force}
-for ($x=0;$x -lt $URL.length;$x++){
-$xml=irm $URL[$x]
-$dd= [System.Text.Encoding]::UTF8.GetString([System.Text.Encoding]::GetEncoding(28591).GetBytes($xml))
-$key='?'+ ($URL[$x] |select-string -pattern 'authkey.*$').matches.value
-$dd=$([XML]$($dd  -replace '^[^<]+')).Folder.Items
-[array]$ResourceID=$dd.Document.ResourceID
-[array]$RelationshipName=$dd.Document.RelationshipName
-for ($i=0;$I -lt $ResourceID.length;$i++){
-$data+=[PScustomobject]@{
-ResourceID=$ResourceID[$i]
-RelationshipName=$RelationshipName[$i]
-path= $path1[$x]+$RelationshipName[$i]
-url=($yuan+$ResourceID[$i]+$key)}}
-[array]$folderID=$dd.folder.ResourceID
-[array]$folderName=$dd.folder.RelationshipName}
-} until ($folderID -eq $null)
-$script=@()
-For ( $x=0; $x -lt $data.length;$x++){
-$path=$data.path[$x]
-$URL=$data.url[$x]
-$script+="iwr '$URL' -o '$path'"}
-if ($script -is [array] -and $script.length -gt 5){
-runspace0 $script
-}elseif($script -is [string]){iex $script}else{
-for ($x=0;$x -lt $script.length;$x++){
-iex $script[$x]}}
-write-host "文件数量："$ResourceID.count -ForegroundColor Blue|out-host
-$data}
 
-if ($uri -notmatch 'onedrive|skydrive|storage'){
-        $link=iwr  $uri -MaximumRedirection 0 -SkipHttpErrorCheck -ErrorAction Ignore
-        $link=$link.headers.location 
-}else{$link=$uri}
-if ($link -match 'ithint\=folder'){
-        $link= $link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)\?resid\=(.*?\d)(\&a.*)$','$1storage$2items/$3?$4'
-        [PScustomobject]@{链接地址=$link}|format-table -wrap
-        Folder-downloads -URL $link -path $path
-}else{
-	#$link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)(.*)$','$1skydrive$2download$3'|out-host
-	#$link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)\?resid\=(.*?\d)(\&a.*)$','$1storage$2items/$3?$4'|out-host
-	$link= $link -replace '^(.*?)(?:onedrive|skydrive)(\..*)?(?:redir|download)(.*)$','$1skydrive$2download$3'
-	#$link=iwr  $uri -MaximumRedirection 0 -SkipHttpErrorCheck -ErrorAction Ignore
-	[PScustomobject]@{链接地址=$link}|format-table -wrap
-	$data=iwr "$link"
-	$replace=$data.headers.'Content-Disposition' -replace '^.*?(?=[^ ''"]+$)'
-	$name=[System.Web.HttpUtility]::UrlDecode($replace)
-	set-content -value $data -path "$path$name"
-	[PScustomobject]@{
-	name=$name
-	path=$path
-	URL=$link}}}
+
+function getweb {
+[CmdletBinding()]
+param($method,$uri,$body,$accesstoken,$ResourceId,$LocalFile,$largelocalfile,[switch]$additem)
+if($LocalFile -and $largelocalfile){write-error '-LocalFile and -largelocalfile 不能共存';break}
+if($largelocalfile){$file=@($largeLocalFile,":/createUploadSession")}elseif($localfile){$file=@($LocalFile,":/content")}
+if (!($Authentication)){$Global:Authentication = New-Object PSObject}
+	if($AccessToken -and ($AccessToken -ne $Authentication.access_token)){
+	switch ($null -eq $Authentication.ResourceId) {
+	true {$Authentication | add-member Noteproperty 'access_token' ($AccessToken)}
+	false {$Authentication.access_token=$AccessToken}}}
+	if($ResourceId -and ($ResourceId -ne $Authentication.ResourceId)){
+	switch ($null -eq $Authentication.ResourceId) {
+	false {$Authentication.ResourceId=$ResourceId}
+	true {$Authentication | add-member Noteproperty 'ResourceId' ($ResourceId)}}}
+
+	$code=@('invalid_token',"The caller is not authenticated.","Authentication failed")
+	do{
+		$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
+	if($uri -match '^http') {$ruri1=$uri}elseif($additem){
+		$rURI1=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($File[0])+$File[1]).Replace("/root/","/root:/")
+		}else{$ruri1=($ODRootURI+$rURI)}
+		if($messq){remove-variable messq -force}
+		Try{
+		if($LocalFile){
+		$webRequest=Invoke-WebRequest -Method $Method -InFile $LocalFile -Uri $rURI1 -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "multipart/form-data"  -UseBasicParsing
+		}else{
+		$webRequest=Invoke-WebRequest -Method $Method -Uri $ruri1 -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -Body $Body -UseBasicParsing
+		}
+	}
+	Catch {
+		#write-verbose ("Upload error: "+$_.Exception.Response.StatusCode+"`n"+ $_.Exception.Response.StatusDescription)
+		#return -1
+		$mess=($_.Exception.response.Headers|Where-Object{$_.key -like 'WWW-Authenticate'}).value
+		if($mess){$mess=$mess -replace '(^|,)[ ]*([^=]+)=("[^"]+")','$1"$2":$3' -replace '^(.*)$','{$1}' |convertfrom-json;write-verbose ($mess|format-table |out-string)}
+		if($_.ErrorDetails.Message){ $messq=($_.ErrorDetails.Message|convertfrom-json).error.message;write-verbose ($messq|format-table|out-string)}
+		if($_.Exception.Message){write-verbose $_.Exception.Message}
+		if($code -contains $messq){#$mess.error
+		splash
+		$AccessToken=$Authentication.access_token
+		$ResourceId=$Authentication.resourceid
+		}}
+	}until($code -notcontains $messq) #$mess.error
+	switch ($webRequest.StatusCode)
+    {
+        200
+		{
+			if (!$BinaryMode) {$responseObject = ConvertFrom-Json $webRequest.Content}
+			return $responseObject
+		}
+        201
+		{
+			write-debug("Success: "+$webRequest.StatusCode+" - "+$webRequest.StatusDescription)
+			if (!$BinaryMode) {$responseObject = ConvertFrom-Json $webRequest.Content}
+			return $responseObject
+		}
+        204
+		{
+			write-debug("Success: "+$webRequest.StatusCode+" - "+$webRequest.StatusDescription+" (item deleted)")
+			$responseObject = "0"
+			return $responseObject
+		}
+        #default {write-warning("Cannot access the api. Webrequest return code is: "+$webRequest.StatusCode+"`n"+$webRequest.StatusDescription)}
+    }
+}
+
+function yunsuan {param($data)
+if ($data -ge 1GB)
+{'{0:F0}GB' -f ($data / 1GB)}
+elseif ($data -ge 1MB)
+{'{0:F0}MB' -f ($data / 1MB)}
+elseif ($data -ge 1KB)
+{'{0:F0}KB' -f ($data / 1KB)}
+else
+{'{0}bytes' -f $data}
+}
