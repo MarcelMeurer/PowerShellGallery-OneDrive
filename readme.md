@@ -11,6 +11,10 @@ This OneDrive version (2.0.0 and higher in PowerShellGallery.com) supports:
 
 ## What's new
 
+Version 2.2.4		
+
+- Bugfix: Cannot access a path on a remote/shared drive
+
 Version 2.2.1		
 
 - Upload support for larger files: *Add-ODItemLarge*

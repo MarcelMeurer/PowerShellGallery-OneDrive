@@ -285,6 +285,70 @@ function Get-ODSharedItems
 	return $ResponseObject.Value
 }
 
+function Format-ODPathorIdStringV2
+{
+	<#
+	.DESCRIPTION
+	Formats a given path like '/myFolder/mySubfolder/myFile' into an expected URI format
+	.PARAMETER Path
+	Specifies the path of an element. If it is not given, the path is "/"
+	.PARAMETER ElementId
+	Specifies the id of an element. If Path and ElementId are given, the ElementId is used with a warning
+	.PARAMETER DriveId
+	Specifies the OneDrive drive id. If not set, the default drive is used
+	.NOTES
+    Author: Marcel Meurer, marcel.meurer@sepago.de, Twitter: MarcelMeurer
+	#>
+	PARAM(
+		[string]$Path="",
+		[string]$DriveId="",
+		[string]$ElementId=""
+	)
+	if (!$ElementId -eq "")
+	{
+		# Use ElementId parameters
+		if (!$Path -eq "") {write-debug("Warning: Path and ElementId parameters are set. Only ElementId is used!")}
+		$drive="/drive"
+		if ($DriveId -ne "") 
+		{	
+			# Named drive
+			$drive="/drives/"+$DriveId
+		}
+		return $drive+"/items/"+$ElementId
+	}
+	else
+	{
+		# Use Path parameter
+		# replace some special characters
+		$Path = ((((($Path -replace '%', '%25') -replace ' ', ' ') -replace '=', '%3d') -replace '\+', '%2b') -replace '&', '%26') -replace '#', '%23'
+		# remove substring starts with "?"
+		if ($Path.Contains("?")) {$Path=$Path.Substring(1,$Path.indexof("?")-1)}
+		# replace "\" with "/"
+		$Path=$Path.Replace("\","/")
+		# filter possible string at the end "/children" (case insensitive)
+		$Path=$Path+"/"
+		$Path=$Path -replace "/children/",""
+		# encoding of URL parts
+		$tmpString=""
+		foreach ($Sub in $Path.Split("/")) {$tmpString+=$Sub+"/"}
+		$Path=$tmpString
+		# remove last "/" if exist 
+		$Path=$Path.TrimEnd("/")
+		# insert drive part of URL
+		if ($DriveId -eq "") 
+		{	
+			# Default drive
+			$Path="/drive/root:"+$Path+""
+		}
+		else
+		{
+			# Named drive
+			$Path="/drives/"+$DriveId+"/root:"+$Path+":"
+		}
+		return ($Path).replace("root::","root:")
+	}
+}
+
 function Format-ODPathorIdString
 {
 	<#
@@ -913,7 +977,7 @@ function Move-ODItem
 			}
 			if (!$TargetPath -eq "") 
 			{
-				$rTURI=Format-ODPathorIdString -path $TargetPath -DriveId $DriveId
+				$rTURI=Format-ODPathorIdStringV2 -path $TargetPath -DriveId $DriveId
 				$body=$body+'"parentReference" : {"path": "'+$rTURI+'"}'
 			}
 			$body=$body+'}'
