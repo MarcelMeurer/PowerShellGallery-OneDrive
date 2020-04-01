@@ -54,6 +54,7 @@ function splash{
 
 function Get-ODAuthentication
 {
+# .ExternalHelp OneDrive-help.xml
 	<#
 	.DESCRIPTION
 	Connect to OneDrive for authentication with a given client id (get your free client id on https://apps.dev.microsoft.com) For a step-by-step guide: https://github.com/MarcelMeurer/PowerShellGallery-OneDrive
@@ -695,7 +696,8 @@ function New-ODFolder
 	$ProgressPreference="SilentlyContinue"
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	$rURI=$rURI+"/children"
-	return Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method POST -rURI $rURI -Body ('{"name": "'+$FolderName+'","folder": { },"@name.conflictBehavior": "fail"}')
+	$body=@{name=$FolderName;folder=@{};"@name.conflictBehavior"="fail"}|convertto-json -EscapeHandling EscapeNonAscii
+	return Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method POST -rURI $rURI -Body $body 
 }
 
 function Remove-ODItem
@@ -846,7 +848,7 @@ function Add-ODItem
 		[Parameter(Mandatory=$false)]
 		[string]$AccessToken,
 		[String]$ResourceId="",
-		[string]$Path="/",
+		[string]$Path="",
 		[string]$ElementId="",
 		[string]$DriveId="",
 		[ValidateScript(
@@ -863,7 +865,7 @@ function Add-ODItem
 		[Parameter(Mandatory=$true)]
 		[string]$LocalFile=""
 	)
-	if($ElementId -and $Path){throw '"-ElementId" and "-Path"Cannot coexist';break}
+	if($ElementId -and $Path){throw '"-ElementId" and "-Path"Cannot coexist';break}elseif(!$ElementId){$path='/'}
 	$rURI=Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId
 	getweb -method put -accesstoken $accesstoken -ResourceId $ResourceId -localfile $LocalFile -additem
 }
@@ -1056,6 +1058,7 @@ function Move-ODItem
 		[string]$ElementId="",
 		[string]$DriveId="",
 		[string]$TargetPath="",
+		[string]$Targetid="",
 		[string]$NewName=""
 	)
 	if (($ElementId+$Path) -eq "")
@@ -1064,7 +1067,7 @@ function Move-ODItem
 	}
 	else
 	{
-		if (($TargetPath+$NewName) -eq "")
+		if (($TargetPath+$NewName+$Targetid) -eq "")
 		{
 			write-error("TargetPath nor NewName is set")
 		}
@@ -1081,11 +1084,16 @@ function Move-ODItem
 			}
 			if (!$TargetPath -eq "")
 			{
-				$rTURI=Format-ODPathorIdString -path $TargetPath -DriveId $DriveId
+				$rTURI=Format-ODPathorIdString -path $TargetPath -DriveId $DriveId  #[System.Web.HttpUtility]::UrlEncode(
 				$rTURI=$rTURI -replace ':$'
 				$body=$body+'"parentReference" : {"path": "'+$rTURI+'"}'
 			}
+			if (!$Targetid -eq "")
+			{
+				$body=$body+'"parentReference" : {"id": "'+$Targetid+'"}'
+			}
 			$body=$body+'}'
+			$body
 			$rURI=(Format-ODPathorIdString -path $Path -ElementId $ElementId -DriveId $DriveId).TrimEnd(':')
 			return Get-ODWebContent -AccessToken $AccessToken -ResourceId $ResourceId -Method PATCH -rURI $rURI -Body $body
 		}
@@ -1254,6 +1262,8 @@ if (!($Authentication)){$Global:Authentication = New-Object PSObject}
 	do{
 		$ODRootURI=Get-ODRootUri -ResourceId $ResourceId
 	if($uri -match '^http') {$ruri1=$uri}elseif($additem){
+	$spacer=""
+		if ($ElementId -ne "") {$spacer=":"}
 		$rURI1=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($File[0])+$File[1]).Replace("/root/","/root:/")
 		}else{$ruri1=($ODRootURI+$rURI)}
 		if($messq){remove-variable messq -force}
