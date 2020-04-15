@@ -61,7 +61,6 @@ function Get-ODAuthentication
 	{
 		write-debug("A refresh token is given. Try to refresh it in code mode.")
 		$body="client_id=$ClientId&redirect_URI=$RedirectURI&client_secret=$([uri]::EscapeDataString($AppKey))&refresh_token="+$RefreshToken+"&grant_type=refresh_token"
-		write-host $body
 		$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2$optOauthVersion/token" -ContentType "application/x-www-form-URLencoded" -Body $Body -UseBasicParsing
 		$Authentication = $webRequest.Content |   ConvertFrom-Json
 	} else
