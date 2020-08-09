@@ -11,6 +11,10 @@ This OneDrive version (2.0.0 and higher in PowerShellGallery.com) supports:
 
 ## What's new
 
+Version 2.2.5
+
+- Change: A endpoint change from Microsoft regarding OneDrive personnel is adapted to avoid the error: "*AADSTS70011: The provided value for the input parameter 'scope' is not valid. The scope '' is not configured for this tenant"
+
 Version 2.2.4		
 
 - Bugfix: Cannot access a path on a remote/shared drive
@@ -84,6 +88,35 @@ Read this on my blog: https://www.sepago.de/blog/onedrive-powershell-module-new-
 
   ![](https://www.sepago.de/wp-content/uploads/2017/12/oda07.png)
 
+Hint: If you create the application in the Azure Portal, make sure to edit the manifest. Change the following values:
+
+
+
+  "signInAudience": "AzureADandPersonalMicrosoftAccount",
+
+  "tags": [
+
+​    "supportsConvergence:true",
+
+​    "availableToOtherTenants:true",
+
+​    "accessTokenVersion:1",
+
+​    "appModelVersion:2"
+
+  ],
+
+  "tokenEncryptionKeyId": null,
+
+  "verifiedPublisher": {
+
+​    "displayName": null,
+
+​    "verifiedPublisherId": null,
+
+​    "addedDateTime": null
+
+  }
 
 ### OneDrive for Business
 

@@ -125,7 +125,14 @@ function Get-ODAuthentication
 			if ($Authentication.code)
 			{
 				$body="client_id=$ClientId&redirect_URI=$RedirectURI&client_secret=$([uri]::EscapeDataString($AppKey))&code="+$Authentication.code+"&grant_type=authorization_code"+$optResourceId
-				$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2$optOauthVersion/token" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
+			
+				if ($ResourceId -ne "")
+				{
+					$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2$optOauthVersion/token" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
+				} else {
+					$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.live.com/oauth20_token.srf" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
+				}
+
 				$Authentication = $webRequest.Content |   ConvertFrom-Json
 			} else
 			{
