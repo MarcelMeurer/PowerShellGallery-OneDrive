@@ -13,7 +13,7 @@ This OneDrive version (2.0.0 and higher in PowerShellGallery.com) supports:
 
 Version 2.2.5
 
-- Change: A endpoint change from Microsoft regarding OneDrive personnel is adapted to avoid the error: "*AADSTS70011: The provided value for the input parameter 'scope' is not valid. The scope '' is not configured for this tenant"
+- Change: A endpoint change from Microsoft regarding OneDrive personnel is adapted to avoid the error: "AADSTS70011: The provided value for the input parameter 'scope' is not valid. The scope '' is not configured for this tenant"
 
 Version 2.2.4		
 
