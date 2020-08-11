@@ -17,10 +17,6 @@ function Get-ODAuthentication
 	In token mode the accept button in the web form is pressed automatically.
 	.PARAMETER RedirectURI
 	Code authentication requires a correct URI. Use the same as in the app registration e.g. http://localhost/logon. Default is https://login.live.com/oauth20_desktop.srf. Don't use this parameter for token-based authentication. 
-	.PARAMETER DontShowLoginScreen
-	Suppresses the logon screen. Be careful: If you suppress the logon screen you cannot logon if your credentials are not passed through. 
-	.PARAMETER LogOut
-	Performs a logout. 
 
 	.EXAMPLE
     $Authentication=Get-ODAuthentication -ClientId "0000000012345678"
@@ -57,11 +53,19 @@ function Get-ODAuthentication
 	{ 
 		$Type="code"
 	}
+	
 	if ($RefreshToken -ne "")
 	{
 		write-debug("A refresh token is given. Try to refresh it in code mode.")
 		$body="client_id=$ClientId&redirect_URI=$RedirectURI&client_secret=$([uri]::EscapeDataString($AppKey))&refresh_token="+$RefreshToken+"&grant_type=refresh_token"
-		$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2$optOauthVersion/token" -ContentType "application/x-www-form-URLencoded" -Body $Body -UseBasicParsing
+		if ($ResourceId -ne "")
+		{
+			# OD4B
+			$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2$optOauthVersion/token" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
+		} else {
+			# OD private
+			$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.live.com/oauth20_token.srf" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
+		}
 		$Authentication = $webRequest.Content |   ConvertFrom-Json
 	} else
 	{
@@ -124,16 +128,16 @@ function Get-ODAuthentication
 			}
 			if ($Authentication.code)
 			{
-				$body="client_id=$ClientId&redirect_URI=$RedirectURI&client_secret=$([uri]::EscapeDataString($AppKey))&code="+$Authentication.code+"&grant_type=authorization_code"+$optResourceId
-			
-				if ($ResourceId -ne "")
-				{
-					$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2$optOauthVersion/token" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
-				} else {
-					$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.live.com/oauth20_token.srf" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
-				}
-
-				$Authentication = $webRequest.Content |   ConvertFrom-Json
+				$body="client_id=$ClientId&redirect_URI=$RedirectURI&client_secret=$([uri]::EscapeDataString($AppKey))&code="+$Authentication.code+"&grant_type=authorization_code"+$optResourceId+"&scope="+$Scope
+			if ($ResourceId -ne "")
+			{
+				# OD4B
+				$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.microsoftonline.com/common/oauth2$optOauthVersion/token" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
+			} else {
+				# OD private
+				$webRequest=Invoke-WebRequest -Method POST -Uri "https://login.live.com/oauth20_token.srf" -ContentType "application/x-www-form-urlencoded" -Body $Body -UseBasicParsing
+			}
+			$Authentication = $webRequest.Content |   ConvertFrom-Json
 			} else
 			{
 				write-error("Cannot get authentication code. Error: "+$ReturnURI)
@@ -157,6 +161,7 @@ function Get-ODAuthentication
 	}
 	return $Authentication 
 }
+
 function Get-ODRootUri 
 {
 	PARAM(
