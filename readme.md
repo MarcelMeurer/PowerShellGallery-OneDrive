@@ -11,6 +11,10 @@ This OneDrive version (2.0.0 and higher in PowerShellGallery.com) supports:
 
 ## What's new
 
+Version 2.2.8
+
+- Change: Update of the meta data 
+
 Version 2.2.6
 
 - Change: A endpoint change from Microsoft regarding OneDrive personnel is adapted to avoid the error: "AADSTS70011: The provided value for the input parameter 'scope' is not valid. The scope '' is not configured for this tenant" for a refresh token
