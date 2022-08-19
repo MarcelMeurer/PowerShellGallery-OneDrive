@@ -70,9 +70,6 @@ function Get-ODAuthentication
 	} else
 	{
 		write-debug("Authentication mode: " +$Type)
-		[Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | out-null
-		[Reflection.Assembly]::LoadWithPartialName("System.Drawing") | out-null
-		[Reflection.Assembly]::LoadWithPartialName("System.Web") | out-null
 		if ($Logout)
 		{
 			$URIGetAccessToken="https://login.live.com/logout.srf"
@@ -90,33 +87,60 @@ function Get-ODAuthentication
 				$URIGetAccessToken="https://login.live.com/oauth20_authorize.srf?client_id="+$ClientId+"&scope="+$Scope+"&response_type="+$Type+"&redirect_URI="+$RedirectURI
 			}
 		}
-		$form = New-Object Windows.Forms.Form
-		$form.text = "Authenticate to OneDrive"
-		$form.size = New-Object Drawing.size @(700,600)
-		$form.Width = 675
-		$form.Height = 750
-		$web=New-object System.Windows.Forms.WebBrowser
-		$web.IsWebBrowserContextMenuEnabled = $true
-		$web.Width = 600
-		$web.Height = 700
-		$web.Location = "25, 25"
-		$web.navigate($URIGetAccessToken)
-		$DocComplete  = {
-			if ($web.Url.AbsoluteUri -match "access_token=|error|code=|logout") {$form.Close() }
-			if ($web.DocumentText -like '*ucaccept*') {
-				if ($AutoAccept) {$web.Document.GetElementById("idBtn_Accept").InvokeMember("click")}
+
+		$ReturnURI = ""
+
+		if($IsWindows) {
+
+			[Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | out-null
+			[Reflection.Assembly]::LoadWithPartialName("System.Drawing") | out-null
+			[Reflection.Assembly]::LoadWithPartialName("System.Web") | out-null
+
+			$form = New-Object Windows.Forms.Form
+			$form.text = "Authenticate to OneDrive"
+			$form.size = New-Object Drawing.size @(700,600)
+			$form.Width = 675
+			$form.Height = 750
+			$web=New-object System.Windows.Forms.WebBrowser
+			$web.IsWebBrowserContextMenuEnabled = $true
+			$web.Width = 600
+			$web.Height = 700
+			$web.Location = "25, 25"
+			$web.navigate($URIGetAccessToken)
+			$DocComplete  = {
+				if ($web.Url.AbsoluteUri -match "access_token=|error|code=|logout") {$form.Close() }
+				if ($web.DocumentText -like '*ucaccept*') {
+					if ($AutoAccept) {$web.Document.GetElementById("idBtn_Accept").InvokeMember("click")}
+				}
 			}
+			$web.Add_DocumentCompleted($DocComplete)
+			$form.Controls.Add($web)
+			if ($DontShowLoginScreen)
+			{
+				write-debug("Logon screen suppressed by flag -DontShowLoginScreen")
+				$form.Opacity = 0.0;
+			}
+			$form.showdialog() | out-null
+
+			# Build object from last URI (which should contains the token)
+			$ReturnURI=($web.Url).ToString().Replace("#","&")
 		}
-		$web.Add_DocumentCompleted($DocComplete)
-		$form.Controls.Add($web)
-		if ($DontShowLoginScreen)
-		{
-			write-debug("Logon screen suppressed by flag -DontShowLoginScreen")
-			$form.Opacity = 0.0;
+		else {	# $IsLinux, $IsMacOS
+
+			Write-Host "You have to authorize this app on your browser."
+			Write-Host "After you accept, the browser will be redirected to a new (invalid) URL."
+			Write-Host "You will need to copy-paste that last URL in this shell."
+			Write-Host ""
+			Write-Host "Press ENTER to continue, then type here the last URL..."
+			Read-Host
+
+			Start-Process ${URIGetAccessToken}
+
+			$webURI=Read-Host "Copy-paste here the last URL from your browser"
+
+			$ReturnURI=$webURI.ToString().Replace("#","&")
 		}
-		$form.showdialog() | out-null
-		# Build object from last URI (which should contains the token)
-		$ReturnURI=($web.Url).ToString().Replace("#","&")
+
 		if ($LogOut) {return "Logout"}
 		if ($Type -eq "code")
 		{
@@ -124,7 +148,9 @@ function Get-ODAuthentication
 			$Authentication = New-Object PSObject
 			ForEach ($element in $ReturnURI.Split("?")[1].Split("&")) 
 			{
-				$Authentication | add-member Noteproperty $element.split("=")[0] $element.split("=")[1]
+				if($element) {
+					$Authentication | add-member Noteproperty $element.split("=")[0] $element.split("=")[1]
+				}
 			}
 			if ($Authentication.code)
 			{
@@ -905,8 +931,11 @@ function Add-ODItemLarge {
 				# The (default) length of an upload session is about 15 minutes!
 			
 			# Set the headers for the actual file chunk's PUT request (by means of the above preset variables)
-			$actHeaders=@{"Content-Length"="$uploadLength"; "Content-Range"="bytes $startingIndex-$endingIndex/$totalLength"};
-			
+			# Note: specifying Content-Length gives duplicate values and raises false error regarding -ContentType
+			# https://github.com/PowerShell/PowerShell/issues/12500
+			$actHeaders=@{"Content-Range"="bytes $startingIndex-$endingIndex/$totalLength"};
+			#$actHeaders=@{"Content-Length"="$uploadLength"; "Content-Range"="bytes $startingIndex-$endingIndex/$totalLength"};
+
 			# Execute the PUT request (upload file chunk)
 			write-debug("Uploading chunk of bytes. Progress: "+$endingIndex/$totalLength*100+" %")
 			$uploadResponse=Invoke-WebRequest -Method PUT -Uri $uURL -Headers $actHeaders -Body $buf -UseBasicParsing -ErrorAction SilentlyContinue
