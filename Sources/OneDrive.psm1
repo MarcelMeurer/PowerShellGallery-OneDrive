@@ -845,7 +845,7 @@ function Add-ODItemLarge {
 		$rURI=(($ODRootURI+$rURI).TrimEnd(":")+$spacer+"/"+[System.IO.Path]::GetFileName($LocalFile)+":/createUploadSession").Replace("/root/","/root:/")
 		
 		# Initialize upload session
-		$webRequest=Invoke-WebRequest -Method PUT -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -UseBasicParsing -ErrorAction SilentlyContinue
+		$webRequest=Invoke-WebRequest -Method POST -Uri $rURI -Header @{ Authorization = "BEARER "+$AccessToken} -ContentType "application/json" -UseBasicParsing -ErrorAction SilentlyContinue
 
 		# Parse the response JSON (into a holder variable)
 		$convertResponse = ($webRequest.Content | ConvertFrom-Json)
