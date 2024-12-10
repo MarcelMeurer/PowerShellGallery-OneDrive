@@ -61,12 +61,12 @@ Before you start using the OneDrive module you have register your script/applica
 - Go to: https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade and login with your Microsoft Account (MSA). Click on "Applications from personal account" to manage your personal app registrations.
   ![](./Media/oda01.png)
 
--- Click on "New Registration". Add the following configurations: 
--- A name
--- Check "Personal Microsoft Account only"
--- Select "Web" as Redirect URI
--- Enter http://localhost/login as the URI for redirection
--- Click on "Register"
+  - Click on "New Registration". Add the following configurations: 
+  - A name
+  - Check "Personal Microsoft Account only"
+  - Select "Web" as Redirect URI
+  - Enter http://localhost/login as the URI for redirection
+  - Click on "Register"
   ![](./Media/oda02.png)
 
 - Goto "Certificates and secrets". Click on "New client secret" and click "Add". Please copy the value (not the secret id) for later use. The value is the AppKey in the OneDrive module.
