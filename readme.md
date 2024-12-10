@@ -58,30 +58,31 @@ Get-Help -Name OneDrive
 Before you start using the OneDrive module you have register your script/application. This differs depending on the OneDrive version to be used.
 
 ### OneDrive Personal
+- Go to: https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade and login with your Microsoft Account (MSA). Click on "Applications from personal account" to manage your personal app registrations.
+  ![](./Media/oda01.png)
 
-Read this on my blog: https://www.sepago.de/blog/onedrive-powershell-module-new-version-with-improved-authentication/
+-- Click on "New Registration". Add the following configurations: 
+-- A name
+-- Check "Personal Microsoft Account only"
+-- Select "Web" as Redirect URI
+-- Enter http://localhost/login as the URI for redirection
+-- Click on "Register"
+  ![](./Media/oda02.png)
 
-- Go to: https://apps.dev.microsoft.com and login with your Microsoft Account (MSA) and "Add an app" in the category "converged applications"
-  ![](https://www.sepago.de/wp-content/uploads/2017/12/oda01.png)
+- Goto "Certificates and secrets". Click on "New client secret" and click "Add". Please copy the value (not the secret id) for later use. The value is the AppKey in the OneDrive module.
+  ![](./Media/oda03.png)
 
-- Enter a name and press "create"
-  ![](https://www.sepago.de/wp-content/uploads/2017/12/oda02.png)
 
-- Press "Generate New Password" and save the password (app key)
-  ![](https://www.sepago.de/wp-content/uploads/2017/12/oda03.png)
+- Goto Authentication and tick the box "ID tokens (used for implicit and hybrid flows)"
+  ![](./Media/oda04.png)
 
-- Also save the "Application id"
+- Goto "API permissions" -> Add a permission -> Microsoft Graph and select "Files.ReadWrite.All" 
+  ![](./Media/oda05.png)
+  ![](./Media/oda06.png)
+	
+- Goto "Overview" and copy the Application (client) ID for later use
 
-- Press "Add Platforms" and select "Web"
-  ![](https://www.sepago.de/wp-content/uploads/2017/12/oda04.png)
-
-- Check "Allow implicit Flow" and enter a "Redirect URL". This is not a real URL. Choose a localhost address and note it. In my case I chose: http://localhost/login
-  ![](https://www.sepago.de/wp-content/uploads/2017/12/oda05.png)
-  ![](https://www.sepago.de/wp-content/uploads/2017/12/oda06.png)
-  
-- Press "Save"
-
-- Now you have all necessary data for your app / script:
+- You now have all necessary data for your app / script:
 
   - Client Id: 5dd40b03-0ead-451b-b5e3-f704550e8cca
   - AppKey: xqacs8K92MuCJKgciRHQ1Cf
@@ -94,7 +95,7 @@ Read this on my blog: https://www.sepago.de/blog/onedrive-powershell-module-new-
   ```
 
 
-  ![](https://www.sepago.de/wp-content/uploads/2017/12/oda07.png)
+  ![](./Media/oda07.png)
 
 Hint: If you create the application in the Azure Portal, make sure to edit the manifest. Change the following values:
 
